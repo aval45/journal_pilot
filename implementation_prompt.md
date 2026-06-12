@@ -98,6 +98,7 @@ If you see a better way to implement a feature, use this protocol:
 - Do not import Prisma, service clients, or private env vars from Client Components.
 - Validate form and action input with Zod.
 - Every mutation must validate input, check permissions, enforce rate limits where applicable, and return a typed `ActionResult<T>`.
+- `ActionResult<T>.error` must contain only user-safe messages; never propagate raw Prisma, PostgreSQL, Supabase, Redis, Storage, webhook, or stack trace errors.
 - Every sensitive mutation must write audit logs as described in the PRD.
 - Normal queries must exclude soft-deleted records by default.
 - Submitted academic records use withdrawal, archive, or soft delete. Hard delete is only for drafts, failed uploads, temporary files, test data, and retention cleanup.
@@ -166,7 +167,9 @@ Feature 2 - Prisma schema and database setup
 - Use `UserRole[]` for multi-role users.
 - Add all core models, enums, relations, and indexes from the PRD.
 - Use private `app` schema for Prisma-managed tables.
-- Add raw SQL migrations for partial unique indexes and integrity checks required by the PRD, including role-array invariants, status-history actor integrity, audit actor integrity, active-record uniqueness, primary-author uniqueness, co-author email uniqueness, case-insensitive user email uniqueness, revision numbers, and file size limits.
+- Add raw SQL migrations for partial unique indexes and integrity checks required by the PRD, including role-array invariants, status-history actor integrity, audit actor integrity, active-record uniqueness, primary-author uniqueness, author-order uniqueness, co-author email uniqueness, case-insensitive user email uniqueness, revision numbers, and file size limits.
+- Add performance indexes required by the PRD, including keyword GIN index, due-date index, storage-purge index, status-history timeline index, review/decision revision-time indexes, and audit actor-time index.
+- Verify Prisma enum-array default behavior for `User.roles` with a test insert and keep the database `roles` non-empty check.
 - Verify the `app` schema is not exposed through Supabase APIs.
 - If any table is in `public` or another exposed schema, enable RLS and deny-by-default policies immediately.
 - Run or provide `prisma validate` and `prisma generate`.
@@ -176,6 +179,7 @@ Feature 3 - Supabase auth integration
 - Install and use `@supabase/ssr`.
 - Add `lib/supabase/browser.ts`, `lib/supabase/server.ts`, and `lib/supabase/proxy.ts`.
 - Add `lib/auth.ts`.
+- Add `requireCurrentUser()` in `lib/auth.ts`; it must load the app `User`, require `deactivatedAt: null`, and deny deactivated users before dashboard/action access.
 - Implement register flow that creates a Supabase Auth user first, then creates the matching Prisma `User` row using the same UUID.
 - If Prisma `User` creation fails after Supabase Auth user creation, compensate with a server-only Supabase admin cleanup/disable step and return a generic retryable error.
 - Add login, register, and forgot-password pages.
@@ -185,6 +189,7 @@ Feature 3 - Supabase auth integration
 Feature 4 - Authorization helpers and route protection
 - Add `lib/permissions.ts`.
 - Add `assertHasRole`, `assertAuthorOf`, `assertEditorOf`, `assertReviewerOf`, and `assertCanTransition`.
+- `assertCanTransition` must enforce transition actor, role, system action, and resource ownership/assignment rules from the PRD transition table.
 - Add `proxy.ts` for optimistic `/dashboard/{role}` redirects only.
 - Make Proxy multi-role aware for redirects only.
 - Stop after this feature.
@@ -201,10 +206,12 @@ Feature 6 - Status machine
 - Create `lib/status-machine.ts`.
 - Add the `ALLOWED_TRANSITIONS` map from the PRD.
 - Add `transitionStatus`.
+- Add transition actor/role/resource policy enforcement so `assertCanTransition` blocks wrong-role users, not just illegal status edges.
 - Write `ManuscriptStatusHistory` for every status change.
 - Support `USER` and `SYSTEM` actors.
-- Generate `Manuscript.displayId` on `DRAFT -> SUBMITTED` with `ManuscriptCounter` inside a transaction.
-- Add unit tests for valid transitions, invalid transitions, actor rules, and duplicate-safe display ID generation.
+- Do not put display ID generation inside the generic status-machine module.
+- Add tests proving `DRAFT -> SUBMITTED` cannot persist without a non-null `displayId`.
+- Add unit tests for valid transitions, invalid transitions, actor rules, and missing-display-ID rejection.
 - Stop after this feature.
 
 Feature 7 - Soft delete, archive, and retention helpers
@@ -229,10 +236,12 @@ Feature 8 - Security audit logging baseline
 Feature 9 - Rate limiting baseline
 - Add `lib/rate-limit.ts`.
 - Use Redis-backed rate limiting.
+- Centralize trusted client IP extraction and do not naively trust raw `X-Forwarded-For`.
 - Add required environment variables.
 - Add limits for auth-adjacent actions, manuscript submission, autosave, file metadata creation, signed URL generation, reviewer invitations, review submissions, editor decisions, admin role changes, and public Route Handlers.
 - Log rate-limit denials to `AuditLog` with outcome `DENIED`.
 - Add tests for rate-limited Server Actions and Route Handlers.
+- Add webhook Route Handler guidance/helpers requiring raw-body HMAC-SHA256 signature verification with constant-time comparison before processing.
 - Stop after this feature.
 
 Feature 10 - Seed strategy
@@ -255,7 +264,7 @@ Feature 12 - Manuscript draft creation
 - Create the `submission-wizard` page override with `ui-ux-pro-max` before implementation.
 - Add create draft action.
 - Add wizard Step 1 and Step 2: journal/article type, title, abstract, keywords.
-- Add Zod validation.
+- Add Zod validation with PRD text limits for title, abstract, keywords, and cover letter.
 - Auto-save draft on step transition.
 - Stop after this feature.
 
@@ -281,9 +290,12 @@ Feature 15 - Submit manuscript
 - Read the `submission-wizard` page override before implementing review/timeline UI.
 - Add cover letter support using `Manuscript.coverLetter` and/or `FileCategory.COVER_LETTER`.
 - Add declarations and review step.
-- Submit manuscript using `transitionStatus` for `DRAFT -> SUBMITTED`.
+- Add manuscript-domain `generateDisplayId` using atomic `ManuscriptCounter` increment-and-return inside the submit transaction.
+- Submit manuscript by calling `generateDisplayId` and `transitionStatus` for `DRAFT -> SUBMITTED` in the same transaction.
+- Add tests for duplicate-safe concurrent display ID generation.
 - Create status history.
 - Add manuscript detail and timeline page.
+- For revision submission, keep pending files at `manuscript.revisionNumber + 1`, then atomically record `REVISION_REQUESTED -> REVISION_SUBMITTED`, increment `revisionNumber`, and auto-transition `REVISION_SUBMITTED -> WITH_EDITOR`.
 - Stop after this feature.
 
 ### Editor
@@ -341,6 +353,7 @@ Feature 21 - Reviewer invitation dashboard
 
 Feature 22 - Permission-checked file downloads
 - Add a Server Action to generate signed download URLs only after permission checks.
+- Require file rows to have `deletedAt: null` and `storagePurgedAt: null`; return a safe `This file is no longer available.` message for purged files.
 - Allow reviewers to access files only after accepting the invitation.
 - Apply author, editor, and admin access rules from the PRD.
 - Stop after this feature.
@@ -349,6 +362,7 @@ Feature 23 - Review submission
 - Read `design-system/journalpilot/MASTER.md` before implementing review form UI.
 - Add review form.
 - Add scores, comments to author, confidential comments, and recommendation.
+- Add Zod validation with PRD text limits for review comments and score ranges.
 - Ensure one review per invitation.
 - Store the invitation's `revisionNumber` on the `Review`.
 - Stop after this feature.
@@ -365,6 +379,7 @@ Feature 24 - Admin dashboard and journal management
 Feature 25 - User role management
 - Add user list.
 - Add multi-role assignment with checkboxes, not a single select.
+- Update `roles`, `primaryRole`, and `lastActiveRole` atomically; never write an empty roles array.
 - Stop after this feature.
 
 Feature 26 - Email template editor
@@ -372,6 +387,7 @@ Feature 26 - Email template editor
 - Add `EmailTemplate` CRUD.
 - Add token preview rendering.
 - Use an allowlisted, server-side token renderer that escapes values by default and sanitizes any rich HTML body before storing or sending.
+- Add Zod validation with PRD text limits for subject, body, and slug.
 - Stop after this feature.
 
 Feature 27 - Analytics

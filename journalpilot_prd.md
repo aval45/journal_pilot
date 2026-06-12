@@ -123,6 +123,18 @@ const ALLOWED_TRANSITIONS: Record<ManuscriptStatus, ManuscriptStatus[]> = {
 }
 ```
 
+`lib/status-machine.ts` must also define a transition authorization policy, such as `TRANSITION_POLICIES`, keyed by `fromStatus -> toStatus`.
+
+Each policy should specify:
+
+- allowed actor type: `USER` or `SYSTEM`
+- required `UserRole[]` for user actors
+- resource relationship check: author, handling editor, admin, reviewer, or none
+- required `systemAction` for system actors
+- whether an audit/status-history note is required
+
+`assertCanTransition` and `transitionStatus` must use this policy so every transition has one source of truth for legal edge + actor + role + resource relationship.
+
 **Who can trigger which transitions:**
 
 | Transition | Actor |
@@ -139,6 +151,20 @@ const ALLOWED_TRANSITIONS: Record<ManuscriptStatus, ManuscriptStatus[]> = {
 | REVISION_REQUESTED → REVISION_SUBMITTED | Author |
 | REVISION_SUBMITTED → WITH_EDITOR | System (auto on revision submit) |
 | Any non-terminal → WITHDRAWN | Author |
+
+MVP assignment note:
+
+- Editors may view newly submitted manuscripts and perform editorial checks, but `INITIAL_CHECK -> WITH_EDITOR` is Admin-triggered because it assigns the handling editor.
+- If the product later supports self-assignment for small journals, update this table and `assertCanTransition` before implementing that behavior.
+
+`assertCanTransition` must enforce this actor/role table, not only the `ALLOWED_TRANSITIONS` map. Treat it as the authoritative transition authorization gate.
+
+Rules:
+
+- User-triggered transitions must verify the user's role and resource relationship, such as author ownership or handling-editor assignment.
+- System-triggered transitions must require an allowlisted `systemAction`.
+- Server Actions may still call `assertHasRole` for readability, but must not rely on action-local role checks as the only protection.
+- Unit tests must prove that an authenticated user with the wrong role cannot trigger editor/admin/system transitions.
 
 ---
 
@@ -170,10 +196,18 @@ Rules:
 
 - `displayId` is nullable while the manuscript is a draft.
 - Generate `displayId` only when the manuscript first transitions from `DRAFT` to `SUBMITTED`.
-- Generate IDs inside a database transaction.
+- Generate IDs inside the same database transaction as manuscript submission.
 - Use `ManuscriptCounter` keyed by `journalId + year` to avoid duplicate IDs under concurrent submissions.
+- Use an atomic increment-and-return strategy, not a read-then-write counter update. Recommended PostgreSQL pattern: `INSERT ... ON CONFLICT ... DO UPDATE SET "nextValue" = "ManuscriptCounter"."nextValue" + 1 RETURNING "nextValue"`, or lock the counter row with `SELECT ... FOR UPDATE` before reading and incrementing.
+- If the returned `nextValue` is the value after incrementing, subtract one for the assigned sequence; document the convention in `generateDisplayId`.
 - Show `displayId` everywhere in the UI instead of the internal `id`.
 - Keep internal `id` for routing and database relations only.
+
+Implementation boundary:
+
+- Put `generateDisplayId` in a manuscript submission/domain helper, not inside the generic status-machine module.
+- The submit action must call `generateDisplayId` and `transitionStatus` in the same transaction.
+- `transitionStatus` must reject `DRAFT -> SUBMITTED` if the transaction attempts to persist a submitted manuscript without a non-null `displayId`.
 
 
 ---
@@ -467,6 +501,10 @@ If a user visits a dashboard for a role they do not have, redirect them to their
 
 > **Revision model:** Revisions are tracked on the same `Manuscript` row by incrementing `revisionNumber`. Files, reviewer invitations, reviews, and editor decisions are versioned by associating them with the revision number active when they are created. There is no separate row per revision and no self-referential parent/child relation.
 
+> **Revision upload timing:** While a manuscript is in `REVISION_REQUESTED`, the current submitted revision remains `Manuscript.revisionNumber`. Files uploaded for the pending revision must be stored with `revisionNumber = manuscript.revisionNumber + 1`. On revision submit, the action promotes `Manuscript.revisionNumber` to that next value in the same transaction as the status transitions.
+
+> **Revision submit transaction:** Submitting a revision must be atomic: validate pending revision files and metadata, create a USER status history entry for `REVISION_REQUESTED -> REVISION_SUBMITTED`, increment `Manuscript.revisionNumber`, then create a SYSTEM status history entry for `REVISION_SUBMITTED -> WITH_EDITOR` with `AUTO_REVISION_RETURNED_TO_EDITOR`. If any step fails, the manuscript must remain in `REVISION_REQUESTED`.
+
 > **RLS note:** This schema intentionally does **not** add `@@map` / `@map` snake_case mappings yet because table-level RLS is not part of the MVP. If table RLS is added later, either write policies using the exact Prisma-generated table/column names or add consistent `@@map` / `@map` mappings before writing SQL policies.
 >
 > **Deletion compatibility note:** The explicit `onDelete: Restrict` on `Manuscript.journal` does not conflict with soft delete. Journals should be deactivated, archived, or soft-deleted instead of hard-deleted while manuscripts still reference them.
@@ -705,6 +743,7 @@ model Manuscript {
   @@index([submittingAuthorId])
   @@index([handlingEditorId])
   @@index([status])
+  @@index([keywords], type: Gin)
   @@index([deletedAt])
   @@index([archivedAt])
   @@schema("app")
@@ -757,6 +796,7 @@ model ManuscriptFile {
   @@index([manuscriptId, revisionNumber])
   @@index([uploadedById])
   @@index([deletedAt])
+  @@index([storagePurgedAt])
   @@schema("app")
 }
 
@@ -774,7 +814,7 @@ model ManuscriptStatusHistory {
   manuscript Manuscript @relation(fields: [manuscriptId], references: [id], onDelete: Cascade)
   changedBy  User?      @relation(fields: [changedById], references: [id])
 
-  @@index([manuscriptId])
+  @@index([manuscriptId, createdAt])
   @@index([changedById])
   @@index([actorType])
   @@schema("app")
@@ -805,6 +845,7 @@ model ReviewInvitation {
   @@index([reviewerId])
   @@index([invitedById])
   @@index([status])
+  @@index([dueDate])
   @@index([deletedAt])
   @@schema("app")
 }
@@ -827,7 +868,7 @@ model Review {
   reviewer   User             @relation(fields: [reviewerId], references: [id])
   invitation ReviewInvitation @relation(fields: [invitationId], references: [id])
 
-  @@index([manuscriptId, revisionNumber])
+  @@index([manuscriptId, revisionNumber, submittedAt])
   @@index([reviewerId])
   @@schema("app")
 }
@@ -844,7 +885,7 @@ model EditorDecision {
   manuscript Manuscript @relation(fields: [manuscriptId], references: [id], onDelete: Cascade)
   editor     User       @relation(fields: [editorId], references: [id])
 
-  @@index([manuscriptId, revisionNumber])
+  @@index([manuscriptId, revisionNumber, createdAt])
   @@index([editorId])
   @@schema("app")
 }
@@ -902,6 +943,7 @@ model AuditLog {
   actorUser User? @relation(fields: [actorUserId], references: [id])
 
   @@index([actorUserId])
+  @@index([actorUserId, createdAt])
   @@index([action])
   @@index([entityType, entityId])
   @@index([outcome])
@@ -980,6 +1022,20 @@ app/api/files/[id]/download/route.ts    # only if streaming/proxying files inste
 
 Do not create CRUD-style Route Handlers for every internal form mutation. If the request is only made by this app's UI, prefer a Server Action.
 
+## Webhook Signature Verification
+
+Every webhook or third-party callback Route Handler must verify a signature before parsing or processing the event.
+
+Rules:
+
+- Read the raw request body bytes before JSON parsing.
+- Verify HMAC-SHA256 signatures using the provider-specific secret and header name.
+- Prefer provider SDK verification helpers when available.
+- If implementing directly, compute the HMAC over the raw body and compare with the supplied signature using constant-time comparison.
+- For custom/internal webhooks, use an `X-Signature-256` style header carrying a SHA-256 HMAC.
+- Reject missing, malformed, expired, or mismatched signatures immediately with a generic `401` or `403`.
+- Apply rate limits and method checks, but never treat rate limits as a substitute for signature verification.
+- Do not log raw payloads, secrets, signatures, tokens, or manuscript/review content.
 
 ---
 
@@ -1071,7 +1127,9 @@ Rules for the MVP:
 - Use `proxy.ts` only for lightweight/optimistic dashboard redirects. Do not rely on Proxy as the authorization layer.
 - Use `lib/permissions.ts` for reusable authorization checks.
 - Use `lib/actions/*.ts` for all server-side mutations and permission enforcement.
-- Every server action must verify the current user and their roles before reading or mutating sensitive data.
+- Every server action must call `requireCurrentUser()` before reading or mutating sensitive user data.
+- `requireCurrentUser()` in `lib/auth.ts` must load the app-level `User`, verify `deactivatedAt IS NULL`, and reject deactivated accounts with `ACCESS_DENIED`.
+- Deactivated account denials must create an `AuditLog` entry when audit logging exists; before the audit helper exists, leave a clearly marked TODO at the single `requireCurrentUser()` enforcement point.
 - Every file download must be permission-checked server-side before generating a signed URL.
 - Use Supabase's built-in Auth rate limits and add JournalPilot app-layer limits around auth-adjacent UI actions such as login, register, forgot-password, resend verification, and magic-link requests. For Server Actions, rely on same-origin/default origin checks, configure `serverActions.allowedOrigins` only when required, and always verify authentication + authorization inside the action.
 
@@ -1088,6 +1146,8 @@ export async function assertCanSoftDelete(userId: string, resourceType: string, 
 export async function assertCanRestore(userId: string, resourceType: string, resourceId: string): Promise<void>
 ```
 
+`assertCanTransition` must read the current manuscript, derive `fromStatus -> toStatus`, validate `ALLOWED_TRANSITIONS`, and enforce the actor/role/resource relationship from the transition table above. This helper is the full transition gate, not a syntax-only status validator.
+
 ### Server action return type
 
 All server actions must return this type for consistent client-side handling:
@@ -1097,6 +1157,45 @@ type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string }
 ```
+
+Safety contract:
+
+- `error` must be a user-facing safe message only.
+- Never return raw Prisma, PostgreSQL, Supabase, Redis, Storage, webhook, or validation-library exception messages directly.
+- Catch internal exceptions, log sanitized details to observability and/or `AuditLog`, and return a generic message such as `Something went wrong. Please try again.`
+- For expected validation failures, map errors to safe field messages without exposing table names, column names, constraint names, SQL, stack traces, bucket paths, or signed URLs.
+
+## Validation Limits
+
+All user-entered text must have Zod limits in `lib/validators/{domain}.ts` before being accepted by Server Actions.
+
+Recommended initial limits:
+
+```txt
+Manuscript.title: 1-500 characters
+Manuscript.abstract: 1-5,000 characters
+Manuscript.keywords: 1-12 keywords, each 1-80 characters
+Manuscript.coverLetter: 0-10,000 characters
+ManuscriptAuthor.name: 1-200 characters
+ManuscriptAuthor.email: valid email, lowercase-normalized, max 320 characters
+ManuscriptAuthor.affiliation: 0-300 characters
+Review.commentsToAuthor: 1-10,000 characters
+Review.confidentialComments: 0-10,000 characters
+EditorDecision.decisionLetter: 1-20,000 characters
+EmailTemplate.subject: 1-200 characters
+EmailTemplate.body: 1-20,000 characters
+EmailTemplate.slug: lowercase slug, 1-120 characters
+Journal.name: 1-200 characters
+Journal.slug: lowercase slug, 1-80 characters
+ArticleType.name: 1-120 characters
+```
+
+Rules:
+
+- Normalize emails and slugs before persistence.
+- Trim text fields before validation where appropriate.
+- Return safe validation messages through `ActionResult`.
+- Add tests for max-length rejection on manuscript submission, reviews, editor decisions, and email templates.
 
 ## Email Template Safety
 
@@ -1156,6 +1255,8 @@ Recommended file path pattern:
 - Authors upload files only under their own `userId` folder.
 - Store only the private `filePath` in `ManuscriptFile`, not a permanent public URL.
 - Generate signed download URLs from the server only after checking permissions.
+- Signed download URL actions must require `deletedAt IS NULL` and `storagePurgedAt IS NULL`.
+- If `storagePurgedAt IS NOT NULL`, return a safe distinct message such as `This file is no longer available.` Do not generate a signed URL and do not let the user hit a broken Supabase Storage URL.
 - Signed download URL TTL: 15 minutes. Regenerate a fresh signed URL on every download request.
 - Editors and reviewers should access files through server-generated signed URLs, not permanent public links.
 - Reviewers can only access manuscript files after accepting an invitation.
@@ -1274,6 +1375,8 @@ Rules:
   - soft-delete fields
   - audit log entity/action/createdAt
 - Avoid N+1 queries. Use batched queries, targeted `include`, or separate aggregate queries.
+- Dashboard stat cards must use aggregate queries that return counts only, not full rows.
+- Where a page needs multiple counts from the same table, prefer one grouped aggregate/raw SQL query or one focused data helper that batches the counts. Avoid scattered independent count calls across components.
 - Keep transactions short. Do not upload files, call external APIs, or send emails inside DB transactions.
 - Use `prisma.$transaction` for display ID generation, status transition + history, and editor decision + status update.
 - Use Supabase pooled runtime connection for app traffic and direct connection only for migrations/admin CLI.
@@ -1602,6 +1705,11 @@ CREATE UNIQUE INDEX unique_active_manuscript_author_email
 ON "app"."ManuscriptAuthor" ("manuscriptId", lower("email"))
 WHERE "deletedAt" IS NULL;
 
+-- Active co-author order must be unique within a manuscript.
+CREATE UNIQUE INDEX unique_active_manuscript_author_order
+ON "app"."ManuscriptAuthor" ("manuscriptId", "order")
+WHERE "deletedAt" IS NULL;
+
 -- Global email template slugs must be unique among active global templates.
 -- Needed because Postgres unique indexes treat NULL values as distinct.
 CREATE UNIQUE INDEX unique_active_global_email_template_slug
@@ -1629,6 +1737,10 @@ Some invariants are enforced in TypeScript and should also be protected with raw
 
 ```sql
 -- User role invariants for multi-role dashboards.
+ALTER TABLE "app"."User"
+ADD CONSTRAINT user_roles_not_empty
+CHECK (array_length("roles", 1) >= 1);
+
 ALTER TABLE "app"."User"
 ADD CONSTRAINT user_primary_role_in_roles
 CHECK ("primaryRole" = ANY("roles"));
@@ -1732,6 +1844,19 @@ User records use **deactivation**, not soft delete.
 
 A deactivated user cannot log into app dashboards or perform actions, but historical records remain linked for auditability.
 
+## User Role Management
+
+`User.roles`, `primaryRole`, and `lastActiveRole` must be updated atomically.
+
+Rules:
+
+- Admin role-change actions must update `roles`, `primaryRole`, and `lastActiveRole` in a single Prisma update or a single database transaction.
+- If the current `primaryRole` is removed, set `primaryRole` to an explicit admin-selected role or the first role in the new roles array.
+- If `lastActiveRole` is removed, set it to `null` or to the new `primaryRole`.
+- Never write an empty `roles` array.
+- Verify Prisma's enum-array default behavior during Feature 2 with `prisma validate`, migration generation, and a test insert. Keep the `user_roles_not_empty` database check as a safety net.
+- Role changes must create an audit log with old/new roles and primary role, without logging secrets or tokens.
+
 
 ---
 
@@ -1811,6 +1936,18 @@ user:{userId}:file:{fileId}:action:signed-url
 
 Never store raw IP addresses in Redis keys or AuditLog metadata. Use a salted hash.
 
+### Client IP extraction
+
+`lib/rate-limit.ts` must centralize client IP extraction.
+
+Rules:
+
+- Read client IP from the deployment platform's trusted request metadata/header.
+- On Vercel, prefer the platform-provided trusted IP helper/header documented for the deployed runtime, such as `x-real-ip` or Vercel's forwarded IP metadata, and verify against current Vercel docs before launch.
+- Do not naively trust the left-most value of raw `X-Forwarded-For`; clients can inject or prepend that header before the request reaches a proxy.
+- If running behind a self-managed reverse proxy, trust forwarded headers only when the immediate proxy is controlled by the team and strips/rebuilds incoming forwarding headers.
+- If no trusted IP source exists, fall back to user/account/action keys and treat IP-based limits as best-effort only.
+
 ## Initial rate limit policy
 
 Start conservative and tune based on logs.
@@ -1845,8 +1982,9 @@ validate input
 
 Route Handler:
 verify method/content type
-→ assertRateLimit()
+→ read raw body when signature verification is required
 → verify signature/auth
+→ assertRateLimit()
 → process request
 → audit log
 ```
@@ -1921,6 +2059,7 @@ Rules:
 - Do not log secrets, tokens, signed URLs, file contents, passwords, or full manuscript text.
 - Sanitize log metadata to prevent log injection.
 - Logs should support security review without leaking confidential academic content.
+- Production hardening: revoke `UPDATE` and `DELETE` on `"app"."AuditLog"` from the runtime app database role once migrations and operational workflows are ready for an append-only database-level policy. Keep migrations/admin roles separate from runtime roles.
 
 
 ---
