@@ -75,6 +75,9 @@ export async function registerAction(
     options: {
       data: {
         name: parsed.data.name,
+        roles: [UserRole.AUTHOR],
+        primaryRole: UserRole.AUTHOR,
+        lastActiveRole: UserRole.AUTHOR,
       },
       emailRedirectTo: `${getAppUrl()}/login`,
     },

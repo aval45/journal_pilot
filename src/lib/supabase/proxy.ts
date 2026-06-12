@@ -1,11 +1,12 @@
 import "server-only";
 
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { getSupabasePublishableKey, getSupabaseUrl } from "@/lib/env";
 
-export async function updateSupabaseSession(request: NextRequest) {
+export async function createSupabaseProxyContext(request: NextRequest) {
   const response = NextResponse.next({
     request,
   });
@@ -28,7 +29,17 @@ export async function updateSupabaseSession(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return { response, user };
+}
+
+export async function updateSupabaseSession(request: NextRequest) {
+  const { response } = await createSupabaseProxyContext(request);
 
   return response;
 }
+
+export type SupabaseProxyUser = User;
