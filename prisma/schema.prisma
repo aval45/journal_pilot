@@ -1,0 +1,418 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["app"]
+}
+
+enum UserRole {
+  AUTHOR
+  REVIEWER
+  EDITOR
+  ADMIN
+
+  @@schema("app")
+}
+
+enum ManuscriptStatus {
+  DRAFT
+  SUBMITTED
+  INITIAL_CHECK
+  WITH_EDITOR
+  REVIEWERS_INVITED
+  UNDER_REVIEW
+  REVIEWS_COMPLETED
+  DECISION_IN_PROCESS
+  REVISION_REQUESTED
+  REVISION_SUBMITTED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+
+  @@schema("app")
+}
+
+enum ReviewInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+
+  @@schema("app")
+}
+
+enum EditorialDecision {
+  ACCEPT
+  MINOR_REVISION
+  MAJOR_REVISION
+  REJECT
+
+  @@schema("app")
+}
+
+enum ReviewRecommendation {
+  ACCEPT
+  MINOR_REVISION
+  MAJOR_REVISION
+  REJECT
+
+  @@schema("app")
+}
+
+enum FileCategory {
+  MANUSCRIPT
+  FIGURE
+  TABLE
+  SUPPLEMENTARY
+  COVER_LETTER
+  REVIEW_ATTACHMENT
+  DECISION_LETTER
+
+  @@schema("app")
+}
+
+enum StatusChangeActorType {
+  USER
+  SYSTEM
+
+  @@schema("app")
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  ANONYMOUS
+  EXTERNAL
+
+  @@schema("app")
+}
+
+enum AuditOutcome {
+  SUCCESS
+  DENIED
+  ERROR
+
+  @@schema("app")
+}
+
+model User {
+  id                      String                      @id @db.Uuid
+  email                   String
+  name                    String
+  roles                   UserRole[]                  @default([AUTHOR])
+  primaryRole             UserRole                    @default(AUTHOR)
+  lastActiveRole          UserRole?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+  deactivatedAt           DateTime?
+  deactivatedById         String?                     @db.Uuid
+  profile                 Profile?
+  submittedManuscripts    Manuscript[]                @relation("SubmittingAuthor")
+  handledManuscripts      Manuscript[]                @relation("HandlingEditor")
+  coAuthoredManuscripts   ManuscriptAuthor[]
+  statusChanges           ManuscriptStatusHistory[]
+  reviewInvitations       ReviewInvitation[]          @relation("ReviewerInvitations")
+  sentReviewInvitations   ReviewInvitation[]          @relation("ReviewInvitationsSent")
+  reviews                 Review[]
+  decisions               EditorDecision[]
+  uploadedFiles           ManuscriptFile[]
+  auditLogs               AuditLog[]
+
+  @@index([email])
+  @@index([deactivatedAt])
+  @@schema("app")
+}
+
+model Profile {
+  id          String  @id @default(cuid())
+  userId      String  @unique @db.Uuid
+  affiliation String?
+  department  String?
+  country     String?
+  orcid       String?
+  expertise   String?
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("app")
+}
+
+model Journal {
+  id                 String              @id @default(cuid())
+  name               String
+  slug               String
+  description        String?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
+  deletedById        String?             @db.Uuid
+  deletionReason     String?
+  manuscripts        Manuscript[]
+  articleTypes       ArticleType[]
+  emailTemplates     EmailTemplate[]
+  manuscriptCounters ManuscriptCounter[]
+
+  @@index([deletedAt])
+  @@schema("app")
+}
+
+model ArticleType {
+  id             String       @id @default(cuid())
+  journalId      String
+  name           String
+  description    String?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  deletedById    String?      @db.Uuid
+  deletionReason String?
+  journal        Journal      @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  manuscripts    Manuscript[]
+
+  @@index([journalId, name])
+  @@index([journalId])
+  @@index([deletedAt])
+  @@schema("app")
+}
+
+model Manuscript {
+  id                  String                    @id @default(cuid())
+  displayId           String?                   @unique
+  journalId           String
+  articleTypeId       String?
+  title               String
+  abstract            String
+  keywords            String[]
+  coverLetter         String?
+  status              ManuscriptStatus          @default(DRAFT)
+  submittingAuthorId  String                    @db.Uuid
+  handlingEditorId    String?                   @db.Uuid
+  revisionNumber      Int                       @default(1)
+  requiredReviewCount Int                       @default(2)
+  submittedAt         DateTime?
+  decisionAt          DateTime?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  archivedAt          DateTime?
+  deletedAt           DateTime?
+  deletedById         String?                   @db.Uuid
+  deletionReason      String?
+  withdrawnAt         DateTime?
+  withdrawnById       String?                   @db.Uuid
+  withdrawalReason    String?
+  journal             Journal                   @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  articleType         ArticleType?              @relation(fields: [articleTypeId], references: [id], onDelete: SetNull)
+  submittingAuthor    User                      @relation("SubmittingAuthor", fields: [submittingAuthorId], references: [id])
+  handlingEditor      User?                     @relation("HandlingEditor", fields: [handlingEditorId], references: [id])
+  authors             ManuscriptAuthor[]
+  files               ManuscriptFile[]
+  statusHistory       ManuscriptStatusHistory[]
+  invitations         ReviewInvitation[]
+  reviews             Review[]
+  decisions           EditorDecision[]
+
+  @@index([journalId])
+  @@index([articleTypeId])
+  @@index([submittingAuthorId])
+  @@index([handlingEditorId])
+  @@index([status])
+  @@index([keywords], type: Gin)
+  @@index([deletedAt])
+  @@index([archivedAt])
+  @@schema("app")
+}
+
+model ManuscriptAuthor {
+  id             String      @id @default(cuid())
+  manuscriptId   String
+  userId         String?     @db.Uuid
+  name           String
+  email          String
+  affiliation    String?
+  order          Int
+  isPrimary      Boolean     @default(false)
+  deletedAt      DateTime?
+  deletedById    String?     @db.Uuid
+  deletionReason String?
+  manuscript     Manuscript  @relation(fields: [manuscriptId], references: [id], onDelete: Cascade)
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([manuscriptId])
+  @@index([userId])
+  @@index([deletedAt])
+  @@schema("app")
+}
+
+model ManuscriptFile {
+  id              String       @id @default(cuid())
+  manuscriptId    String
+  fileName        String
+  filePath        String
+  storageBucket   String
+  mimeType        String
+  fileCategory    FileCategory
+  fileSize        Int
+  sha256          String?
+  revisionNumber  Int          @default(1)
+  uploadedById    String       @db.Uuid
+  uploadedAt      DateTime     @default(now())
+  deletedAt       DateTime?
+  deletedById     String?      @db.Uuid
+  deletionReason  String?
+  storagePurgedAt DateTime?
+  manuscript      Manuscript   @relation(fields: [manuscriptId], references: [id], onDelete: Cascade)
+  uploadedBy      User         @relation(fields: [uploadedById], references: [id])
+
+  @@index([manuscriptId])
+  @@index([manuscriptId, revisionNumber])
+  @@index([uploadedById])
+  @@index([deletedAt])
+  @@index([storagePurgedAt])
+  @@schema("app")
+}
+
+model ManuscriptStatusHistory {
+  id           String                @id @default(cuid())
+  manuscriptId String
+  fromStatus   ManuscriptStatus?
+  toStatus     ManuscriptStatus
+  actorType    StatusChangeActorType @default(USER)
+  changedById  String?               @db.Uuid
+  systemAction String?
+  note         String?
+  createdAt    DateTime              @default(now())
+  manuscript   Manuscript            @relation(fields: [manuscriptId], references: [id], onDelete: Cascade)
+  changedBy    User?                 @relation(fields: [changedById], references: [id])
+
+  @@index([manuscriptId, createdAt])
+  @@index([changedById])
+  @@index([actorType])
+  @@schema("app")
+}
+
+model ReviewInvitation {
+  id             String                 @id @default(cuid())
+  manuscriptId   String
+  reviewerId     String                 @db.Uuid
+  invitedById    String                 @db.Uuid
+  revisionNumber Int                    @default(1)
+  status         ReviewInvitationStatus @default(PENDING)
+  invitedAt      DateTime               @default(now())
+  respondedAt    DateTime?
+  dueDate        DateTime?
+  deletedAt      DateTime?
+  deletedById    String?                @db.Uuid
+  deletionReason String?
+  manuscript     Manuscript             @relation(fields: [manuscriptId], references: [id], onDelete: Cascade)
+  reviewer       User                   @relation("ReviewerInvitations", fields: [reviewerId], references: [id])
+  invitedBy      User                   @relation("ReviewInvitationsSent", fields: [invitedById], references: [id])
+  review         Review?
+
+  @@index([manuscriptId, revisionNumber, reviewerId])
+  @@index([manuscriptId, revisionNumber])
+  @@index([reviewerId])
+  @@index([invitedById])
+  @@index([status])
+  @@index([dueDate])
+  @@index([deletedAt])
+  @@schema("app")
+}
+
+model Review {
+  id                   String               @id @default(cuid())
+  manuscriptId         String
+  reviewerId           String               @db.Uuid
+  invitationId         String               @unique
+  revisionNumber       Int                  @default(1)
+  recommendation       ReviewRecommendation
+  commentsToAuthor     String
+  confidentialComments String?
+  scoreOriginality     Int?
+  scoreMethodology     Int?
+  scoreClarity         Int?
+  submittedAt          DateTime             @default(now())
+  manuscript           Manuscript           @relation(fields: [manuscriptId], references: [id], onDelete: Cascade)
+  reviewer             User                 @relation(fields: [reviewerId], references: [id])
+  invitation           ReviewInvitation     @relation(fields: [invitationId], references: [id])
+
+  @@index([manuscriptId, revisionNumber, submittedAt])
+  @@index([reviewerId])
+  @@schema("app")
+}
+
+model EditorDecision {
+  id             String            @id @default(cuid())
+  manuscriptId   String
+  editorId       String            @db.Uuid
+  revisionNumber Int               @default(1)
+  decision       EditorialDecision
+  decisionLetter String
+  createdAt      DateTime          @default(now())
+  manuscript     Manuscript        @relation(fields: [manuscriptId], references: [id], onDelete: Cascade)
+  editor         User              @relation(fields: [editorId], references: [id])
+
+  @@index([manuscriptId, revisionNumber, createdAt])
+  @@index([editorId])
+  @@schema("app")
+}
+
+model EmailTemplate {
+  id             String    @id @default(cuid())
+  journalId      String?
+  name           String
+  slug           String
+  subject        String
+  body           String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  deletedById    String?   @db.Uuid
+  deletionReason String?
+  journal        Journal?  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  @@index([journalId, slug])
+  @@index([journalId])
+  @@index([deletedAt])
+  @@schema("app")
+}
+
+model ManuscriptCounter {
+  id        String   @id @default(cuid())
+  journalId String
+  year      Int
+  nextValue Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  journal   Journal  @relation(fields: [journalId], references: [id], onDelete: Restrict)
+
+  @@unique([journalId, year])
+  @@index([journalId])
+  @@schema("app")
+}
+
+model AuditLog {
+  id            String         @id @default(cuid())
+  actorType     AuditActorType @default(USER)
+  actorUserId   String?        @db.Uuid
+  action        String
+  entityType    String
+  entityId      String?
+  outcome       AuditOutcome   @default(SUCCESS)
+  ipHash        String?
+  userAgentHash String?
+  metadata      Json?
+  createdAt     DateTime       @default(now())
+  actorUser     User?          @relation(fields: [actorUserId], references: [id])
+
+  @@index([actorUserId])
+  @@index([actorUserId, createdAt])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([outcome])
+  @@index([createdAt])
+  @@schema("app")
+}
