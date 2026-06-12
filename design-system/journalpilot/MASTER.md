@@ -7,8 +7,8 @@
 ---
 
 **Project:** JournalPilot
-**Generated:** 2026-06-13 00:11:30
-**Category:** Analytics Dashboard
+**Generated:** 2026-06-13 01:03:47
+**Category:** Micro SaaS
 
 ---
 
@@ -38,24 +38,24 @@ Preferred visual direction:
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#18181B` | `--color-primary` |
-| Secondary | `#3F3F46` | `--color-secondary` |
-| CTA/Accent | `#EC4899` | `--color-cta` |
-| Background | `#FAFAFA` | `--color-background` |
-| Text | `#09090B` | `--color-text` |
+| Primary | `#0891B2` | `--color-primary` |
+| Secondary | `#22D3EE` | `--color-secondary` |
+| CTA/Accent | `#22C55E` | `--color-cta` |
+| Background | `#ECFEFF` | `--color-background` |
+| Text | `#164E63` | `--color-text` |
 
-**Color Notes:** Editorial black + accent pink
+**Color Notes:** Fresh cyan + clean green
 
 ### Typography
 
-- **Heading Font:** Libre Bodoni
-- **Body Font:** Public Sans
-- **Mood:** magazine, editorial, publishing, refined, journalism, print
-- **Google Fonts:** [Libre Bodoni + Public Sans](https://fonts.google.com/share?selection.family=Libre+Bodoni:wght@400;500;600;700|Public+Sans:wght@300;400;500;600;700)
+- **Heading Font:** Crimson Pro
+- **Body Font:** Atkinson Hyperlegible
+- **Mood:** academic, research, scholarly, accessible, readable, educational
+- **Google Fonts:** [Crimson Pro + Atkinson Hyperlegible](https://fonts.google.com/share?selection.family=Atkinson+Hyperlegible:wght@400;700|Crimson+Pro:wght@400;500;600;700)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Libre+Bodoni:wght@400;500;600;700&family=Public+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Crimson+Pro:wght@400;500;600;700&display=swap');
 ```
 
 ### Spacing Variables
@@ -88,7 +88,7 @@ Preferred visual direction:
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #EC4899;
+  background: #22C55E;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -105,8 +105,8 @@ Preferred visual direction:
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #18181B;
-  border: 2px solid #18181B;
+  color: #0891B2;
+  border: 2px solid #0891B2;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -119,7 +119,7 @@ Preferred visual direction:
 
 ```css
 .card {
-  background: #FAFAFA;
+  background: #ECFEFF;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -145,9 +145,9 @@ Preferred visual direction:
 }
 
 .input:focus {
-  border-color: #18181B;
+  border-color: #0891B2;
   outline: none;
-  box-shadow: 0 0 0 3px #18181B20;
+  box-shadow: 0 0 0 3px #0891B220;
 }
 ```
 
@@ -173,28 +173,28 @@ Preferred visual direction:
 
 ## Style Guidelines
 
-**Style:** Data-Dense Dashboard
+**Style:** Flat Design
 
-**Keywords:** Multiple charts/widgets, data tables, KPI cards, minimal padding, grid layout, space-efficient, maximum data visibility
+**Keywords:** 2D, minimalist, bold colors, no shadows, clean lines, simple shapes, typography-focused, modern, icon-heavy
 
-**Best For:** Business intelligence dashboards, financial analytics, enterprise reporting, operational dashboards, data warehousing
+**Best For:** Web apps, mobile apps, cross-platform, startup MVPs, user-friendly, SaaS, dashboards, corporate
 
-**Key Effects:** Hover tooltips, chart zoom on click, row highlighting on hover, smooth filter animations, data loading spinners
+**Key Effects:** No gradients/shadows, simple hover (color/opacity shift), fast loading, clean transitions (150-200ms ease), minimal icons
 
 ### Page Pattern
 
-**Pattern Name:** Product Review/Ratings Focused
+**Pattern Name:** Minimal Single Column
 
-- **Conversion Strategy:** User-generated content builds trust. Show verified purchases. Filter by rating. Respond to negative reviews.
-- **CTA Placement:** After reviews summary + Buy button alongside reviews
-- **Section Order:** 1. Hero (product + aggregate rating), 2. Rating breakdown, 3. Individual reviews, 4. Buy/CTA
+- **Conversion Strategy:** Single CTA focus. Large typography. Lots of whitespace. No nav clutter. Mobile-first.
+- **CTA Placement:** Center, large CTA button
+- **Section Order:** 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Ornate design
-- ❌ No filtering
+- ❌ Complex onboarding flow
+- ❌ Cluttered layout
 
 ### Additional Forbidden Patterns
 
