@@ -56,8 +56,14 @@ describe("audit logging", () => {
         userAgentHash: hashAuditValue("Test Agent"),
       }),
     });
-    expect(create.mock.calls[0][0].data.ipHash).not.toBe("203.0.113.10");
-    expect(create.mock.calls[0][0].data.userAgentHash).not.toBe("Test Agent");
+    const auditData = create.mock.calls[0][0].data;
+
+    expect(auditData).not.toHaveProperty("ipAddress");
+    expect(auditData).not.toHaveProperty("userAgent");
+    expect(auditData.ipHash).not.toBe("203.0.113.10");
+    expect(auditData.userAgentHash).not.toBe("Test Agent");
+    expect(JSON.stringify(auditData)).not.toContain("203.0.113.10");
+    expect(JSON.stringify(auditData)).not.toContain("Test Agent");
   });
 
   test("creates audit log rows for sensitive actions", async () => {
