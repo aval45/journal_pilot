@@ -112,6 +112,20 @@ export const uploadMetadataSchema = z
     },
   );
 
+export const submitManuscriptSchema = z.object({
+  authorshipConfirmed: z.literal(true, {
+    error: "Confirm authorship before submitting.",
+  }),
+  coverLetter: manuscriptTextSchema.coverLetter,
+  manuscriptId: z.string().trim().min(1, "Choose a manuscript."),
+  noConflictsConfirmed: z.literal(true, {
+    error: "Confirm conflict-of-interest disclosure before submitting.",
+  }),
+  originalityConfirmed: z.literal(true, {
+    error: "Confirm originality before submitting.",
+  }),
+});
+
 export function parseKeywordsInput(value: string) {
   return value
     .split(",")

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { CoAuthorPanel } from "@/components/submission/co-author-panel";
 import { FileUploadCard } from "@/components/submission/file-upload-card";
+import { SubmitManuscriptPanel } from "@/components/submission/submit-manuscript-panel";
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import { formatFileSize } from "@/lib/file-policy";
 import { requireCurrentUser } from "@/lib/auth";
@@ -110,6 +111,14 @@ export default async function AuthorManuscriptPage({
               )}
             </div>
           </section>
+          {manuscript.status === ManuscriptStatus.DRAFT ||
+          manuscript.status === ManuscriptStatus.REVISION_REQUESTED ? (
+            <SubmitManuscriptPanel
+              initialCoverLetter={manuscript.coverLetter}
+              manuscriptId={manuscript.id}
+              status={manuscript.status}
+            />
+          ) : null}
         </div>
 
         <aside className="rounded-lg border border-border bg-card p-6 shadow-sm">
@@ -141,6 +150,12 @@ export default async function AuthorManuscriptPage({
               )}
             </div>
           </div>
+          <a
+            className="mt-5 inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+            href={`/dashboard/author/manuscripts/${manuscript.id}/timeline`}
+          >
+            View timeline
+          </a>
         </aside>
       </div>
     </section>

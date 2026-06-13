@@ -32,6 +32,7 @@ export async function getAuthorManuscriptDetail({
     select: {
       id: true,
       abstract: true,
+      coverLetter: true,
       displayId: true,
       keywords: true,
       revisionNumber: true,

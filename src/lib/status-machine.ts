@@ -396,86 +396,102 @@ export async function transitionStatus({
   note?: string;
   toStatus: ManuscriptStatus;
 }) {
-  return prisma.$transaction(async (tx) => {
-    const manuscript = await tx.manuscript.findFirst({
-      where: {
-        id: manuscriptId,
-        deletedAt: null,
-      },
-      select: {
-        displayId: true,
-        status: true,
-      },
-    });
-
-    if (!manuscript) {
-      throw new AccessDeniedError();
-    }
-
-    await assertCanTransitionWithClient(
-      tx as unknown as StatusMachineDb,
+  return prisma.$transaction((tx) =>
+    transitionStatusWithClient(tx as unknown as StatusMachineDb & AuditLogDb, {
       actor,
+      displayId,
       manuscriptId,
+      note,
       toStatus,
-    );
+    }),
+  );
+}
 
-    if (
-      manuscript.status === ManuscriptStatus.DRAFT &&
-      toStatus === ManuscriptStatus.SUBMITTED &&
-      !displayId &&
-      !manuscript.displayId
-    ) {
-      throw new Error("Submitted manuscripts must have a displayId.");
-    }
-
-    const updated = await tx.manuscript.update({
-      where: { id: manuscriptId },
-      data: {
-        status: toStatus,
-        ...(displayId ? { displayId } : {}),
-        ...(toStatus === ManuscriptStatus.SUBMITTED
-          ? { submittedAt: new Date() }
-          : {}),
-        ...(toStatus === ManuscriptStatus.WITHDRAWN
-          ? { withdrawnAt: new Date() }
-          : {}),
-      },
-    });
-
-    await tx.manuscriptStatusHistory.create({
-      data: {
-        manuscriptId,
-        fromStatus: manuscript.status,
-        toStatus,
-        actorType:
-          actor.type === "USER"
-            ? StatusChangeActorType.USER
-            : StatusChangeActorType.SYSTEM,
-        changedById: actor.type === "USER" ? actor.userId : null,
-        systemAction: actor.type === "SYSTEM" ? actor.systemAction : null,
-        note,
-      },
-    });
-
-    const auditAction =
-      toStatus === ManuscriptStatus.SUBMITTED
-        ? AUDIT_ACTIONS.MANUSCRIPT_SUBMITTED
-        : toStatus === ManuscriptStatus.WITHDRAWN
-          ? AUDIT_ACTIONS.MANUSCRIPT_WITHDRAWN
-          : "MANUSCRIPT_STATUS_CHANGED";
-
-    await writeAuditLogWithClient(tx as unknown as AuditLogDb, {
-      action: auditAction,
-      actorType: actor.type === "USER" ? "USER" : "SYSTEM",
-      actorUserId: actor.type === "USER" ? actor.userId : null,
-      entityId: manuscriptId,
-      entityType: "Manuscript",
-      metadata: {
-        fromStatus: manuscript.status,
-        toStatus,
-      },
-    });
-
-    return updated;
+export async function transitionStatusWithClient(
+  db: StatusMachineDb & AuditLogDb,
+  {
+    actor,
+    displayId,
+    manuscriptId,
+    note,
+    toStatus,
+  }: {
+    actor: TransitionActor;
+    displayId?: string;
+    manuscriptId: string;
+    note?: string;
+    toStatus: ManuscriptStatus;
+  },
+) {
+  const manuscript = await db.manuscript.findFirst({
+    where: {
+      id: manuscriptId,
+      deletedAt: null,
+    },
+    select: {
+      displayId: true,
+      status: true,
+    },
   });
+
+  if (!manuscript) {
+    throw new AccessDeniedError();
+  }
+
+  await assertCanTransitionWithClient(db, actor, manuscriptId, toStatus);
+
+  if (
+    manuscript.status === ManuscriptStatus.DRAFT &&
+    toStatus === ManuscriptStatus.SUBMITTED &&
+    !displayId &&
+    !manuscript.displayId
+  ) {
+    throw new Error("Submitted manuscripts must have a displayId.");
+  }
+
+  const updated = await db.manuscript.update({
+    where: { id: manuscriptId },
+    data: {
+      status: toStatus,
+      ...(displayId ? { displayId } : {}),
+      ...(toStatus === ManuscriptStatus.SUBMITTED ? { submittedAt: new Date() } : {}),
+      ...(toStatus === ManuscriptStatus.WITHDRAWN ? { withdrawnAt: new Date() } : {}),
+    },
+  });
+
+  await db.manuscriptStatusHistory.create({
+    data: {
+      manuscriptId,
+      fromStatus: manuscript.status,
+      toStatus,
+      actorType:
+        actor.type === "USER"
+          ? StatusChangeActorType.USER
+          : StatusChangeActorType.SYSTEM,
+      changedById: actor.type === "USER" ? actor.userId : null,
+      systemAction: actor.type === "SYSTEM" ? actor.systemAction : null,
+      note,
+    },
+  });
+
+  const auditAction =
+    toStatus === ManuscriptStatus.SUBMITTED
+      ? AUDIT_ACTIONS.MANUSCRIPT_SUBMITTED
+      : toStatus === ManuscriptStatus.WITHDRAWN
+        ? AUDIT_ACTIONS.MANUSCRIPT_WITHDRAWN
+        : "MANUSCRIPT_STATUS_CHANGED";
+
+  await writeAuditLogWithClient(db, {
+    action: auditAction,
+    actorType: actor.type === "USER" ? "USER" : "SYSTEM",
+    actorUserId: actor.type === "USER" ? actor.userId : null,
+    entityId: manuscriptId,
+    entityType: "Manuscript",
+    metadata: {
+      fromStatus: manuscript.status,
+      toStatus,
+    },
+  });
+
+  return updated;
 }

@@ -5,8 +5,13 @@ import { randomUUID } from "node:crypto";
 
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import type { ActionResult } from "@/lib/action-result";
+import type { AuditLogDb } from "@/lib/audit";
 import { requireCurrentUser } from "@/lib/auth";
 import { sanitizeFileName } from "@/lib/file-policy";
+import {
+  generateDisplayId,
+  type DisplayIdDb,
+} from "@/lib/manuscripts/display-id";
 import { prisma } from "@/lib/prisma";
 import { assertAuthorOf, assertHasRole } from "@/lib/permissions";
 import {
@@ -21,9 +26,14 @@ import {
   createDraftShellSchema,
   removeCoAuthorSchema,
   reorderCoAuthorsSchema,
+  submitManuscriptSchema,
   uploadMetadataSchema,
 } from "@/lib/validators/manuscript";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import {
+  transitionStatusWithClient,
+  type StatusMachineDb,
+} from "@/lib/status-machine";
 
 async function limitDraftMutation(userId: string) {
   try {
@@ -211,6 +221,28 @@ async function assertEditableDraftForAuthor(userId: string, manuscriptId: string
   });
 
   return Boolean(manuscript);
+}
+
+async function getUploadableManuscriptForAuthor(
+  userId: string,
+  manuscriptId: string,
+) {
+  await assertAuthorOf(userId, manuscriptId);
+
+  return prisma.manuscript.findFirst({
+    where: {
+      id: manuscriptId,
+      deletedAt: null,
+      status: {
+        in: [ManuscriptStatus.DRAFT, ManuscriptStatus.REVISION_REQUESTED],
+      },
+      submittingAuthorId: userId,
+    },
+    select: {
+      revisionNumber: true,
+      status: true,
+    },
+  });
 }
 
 export async function addCoAuthorAction(input: unknown): Promise<ActionResult> {
@@ -428,13 +460,16 @@ export async function createManuscriptUploadUrlAction(
     throw error;
   }
 
-  const canEdit = await assertEditableDraftForAuthor(
+  const manuscript = await getUploadableManuscriptForAuthor(
     user.id,
     parsed.data.manuscriptId,
   );
 
-  if (!canEdit) {
-    return { success: false, error: "Only draft manuscripts can accept uploads." };
+  if (!manuscript) {
+    return {
+      success: false,
+      error: "Only draft or revision-requested manuscripts can accept uploads.",
+    };
   }
 
   const fileId = randomUUID();
@@ -463,6 +498,10 @@ export async function createManuscriptUploadUrlAction(
       id: fileId,
       manuscriptId: parsed.data.manuscriptId,
       mimeType: parsed.data.mimeType,
+      revisionNumber:
+        manuscript.status === ManuscriptStatus.REVISION_REQUESTED
+          ? manuscript.revisionNumber + 1
+          : manuscript.revisionNumber,
       sha256: parsed.data.sha256,
       storageBucket: bucket,
       uploadedById: user.id,
@@ -480,4 +519,187 @@ export async function createManuscriptUploadUrlAction(
       token: data.token,
     },
   };
+}
+
+async function limitSubmission(userId: string) {
+  try {
+    await assertServerActionRateLimit({
+      actorType: "USER",
+      actorUserId: userId,
+      subject: RATE_LIMIT_SUBJECTS.MANUSCRIPT_SUBMIT,
+      userId,
+    });
+
+    return null;
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      return rateLimitActionError();
+    }
+
+    throw error;
+  }
+}
+
+export async function submitManuscriptAction(
+  input: unknown,
+): Promise<ActionResult<{ displayId: string }>> {
+  const parsed = submitManuscriptSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Complete the declarations before submitting.",
+    };
+  }
+
+  const user = await requireCurrentUser();
+  const rateLimitError = await limitSubmission(user.id);
+
+  if (rateLimitError) {
+    return rateLimitError;
+  }
+
+  await assertAuthorOf(user.id, parsed.data.manuscriptId);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const manuscript = await tx.manuscript.findFirst({
+      where: {
+        id: parsed.data.manuscriptId,
+        deletedAt: null,
+        status: ManuscriptStatus.DRAFT,
+        submittingAuthorId: user.id,
+      },
+      select: {
+        displayId: true,
+        journalId: true,
+      },
+    });
+
+    if (!manuscript) {
+      return null;
+    }
+
+    const displayId =
+      manuscript.displayId ??
+      (await generateDisplayId({
+        db: tx as unknown as DisplayIdDb,
+        journalId: manuscript.journalId,
+      }));
+
+    await tx.manuscript.update({
+      where: { id: parsed.data.manuscriptId },
+      data: {
+        coverLetter: parsed.data.coverLetter || null,
+      },
+    });
+
+    await transitionStatusWithClient(
+      tx as unknown as StatusMachineDb & AuditLogDb,
+      {
+        actor: { type: "USER", userId: user.id },
+        displayId,
+        manuscriptId: parsed.data.manuscriptId,
+        note: "Author submitted manuscript.",
+        toStatus: ManuscriptStatus.SUBMITTED,
+      },
+    );
+
+    return { displayId };
+  });
+
+  if (!result) {
+    return {
+      success: false,
+      error: "Only draft manuscripts can be submitted.",
+    };
+  }
+
+  revalidatePath("/dashboard/author");
+  revalidatePath(`/dashboard/author/manuscripts/${parsed.data.manuscriptId}`);
+
+  return { success: true, data: result };
+}
+
+export async function submitRevisionAction(
+  input: unknown,
+): Promise<ActionResult> {
+  const parsed = submitManuscriptSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Complete the declarations before submitting.",
+    };
+  }
+
+  const user = await requireCurrentUser();
+  const rateLimitError = await limitSubmission(user.id);
+
+  if (rateLimitError) {
+    return rateLimitError;
+  }
+
+  await assertAuthorOf(user.id, parsed.data.manuscriptId);
+
+  const submitted = await prisma.$transaction(async (tx) => {
+    const manuscript = await tx.manuscript.findFirst({
+      where: {
+        id: parsed.data.manuscriptId,
+        deletedAt: null,
+        status: ManuscriptStatus.REVISION_REQUESTED,
+        submittingAuthorId: user.id,
+      },
+      select: {
+        revisionNumber: true,
+      },
+    });
+
+    if (!manuscript) {
+      return false;
+    }
+
+    await tx.manuscript.update({
+      where: { id: parsed.data.manuscriptId },
+      data: {
+        coverLetter: parsed.data.coverLetter || null,
+        revisionNumber: manuscript.revisionNumber + 1,
+      },
+    });
+
+    await transitionStatusWithClient(
+      tx as unknown as StatusMachineDb & AuditLogDb,
+      {
+        actor: { type: "USER", userId: user.id },
+        manuscriptId: parsed.data.manuscriptId,
+        note: "Author submitted revision.",
+        toStatus: ManuscriptStatus.REVISION_SUBMITTED,
+      },
+    );
+    await transitionStatusWithClient(
+      tx as unknown as StatusMachineDb & AuditLogDb,
+      {
+        actor: {
+          type: "SYSTEM",
+          systemAction: "AUTO_REVISION_RETURNED_TO_EDITOR",
+        },
+        manuscriptId: parsed.data.manuscriptId,
+        note: "Revision returned to editor automatically.",
+        toStatus: ManuscriptStatus.WITH_EDITOR,
+      },
+    );
+
+    return true;
+  });
+
+  if (!submitted) {
+    return {
+      success: false,
+      error: "Only revision-requested manuscripts can be resubmitted.",
+    };
+  }
+
+  revalidatePath("/dashboard/author");
+  revalidatePath(`/dashboard/author/manuscripts/${parsed.data.manuscriptId}`);
+
+  return { success: true, data: undefined };
 }
