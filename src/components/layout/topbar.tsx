@@ -5,14 +5,16 @@ import { ROLE_LABELS } from "@/lib/roles";
 
 import { RoleSwitcher } from "./role-switcher";
 import { SidebarNav } from "./sidebar-nav";
+import { UserDropdown } from "./user-dropdown";
 
 type TopbarProps = {
   userName: string;
+  userEmail: string;
   roles: UserRole[];
   activeRole: UserRole;
 };
 
-export function Topbar({ userName, roles, activeRole }: TopbarProps) {
+export function Topbar({ userName, userEmail, roles, activeRole }: TopbarProps) {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
       <div className="flex min-h-16 items-center justify-between gap-4 px-4 lg:px-6">
@@ -46,8 +48,11 @@ export function Topbar({ userName, roles, activeRole }: TopbarProps) {
           <span>Search manuscripts</span>
         </div>
 
-        <div className="w-44">
-          <RoleSwitcher roles={roles} activeRole={activeRole} />
+        <div className="flex shrink-0 items-center gap-4">
+          <div className="hidden w-44 md:block">
+            <RoleSwitcher roles={roles} activeRole={activeRole} />
+          </div>
+          <UserDropdown userName={userName} userEmail={userEmail} />
         </div>
       </div>
     </header>

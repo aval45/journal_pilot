@@ -45,6 +45,7 @@ export function DashboardShell({
       <div className="min-w-0">
         <Topbar
           userName={user.name}
+          userEmail={user.email}
           roles={user.roles}
           activeRole={activeRole}
         />

@@ -1,34 +1,14 @@
 # Design System Master File
 
-> **LOGIC:** When building a specific page, first check `design-system/journalpilot/pages/[page-name].md`.
+> **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
 > If that file exists, its rules **override** this Master file.
 > If not, strictly follow the rules below.
 
 ---
 
 **Project:** JournalPilot
-**Generated:** 2026-06-13 15:05:41
-**Category:** Micro SaaS
-
----
-
-## JournalPilot Product Overrides
-
-JournalPilot is an authenticated operational SaaS dashboard for academic manuscript submission and peer review.
-
-Use the skill-generated dashboard, accessibility, typography, spacing, table, form, and interaction guidance. Ignore any generated marketing-page, hero, conversion, portfolio, product-review, contact-sales, logo-carousel, testimonial, lead-magnet, or landing-page section guidance for authenticated app screens.
-
-Preferred visual direction:
-
-- Dense but calm operational dashboard.
-- Fixed sidebar and topbar for authenticated areas.
-- Compact cards, tables, filters, timelines, steppers, forms, and status badges.
-- shadcn/ui components and Lucide icons.
-- No emoji icons.
-- No layout-shifting hover transforms.
-- No oversized marketing heroes inside the app.
-- No card-inside-card page sections.
-- Accessible focus states, labels, contrast, and keyboard navigation.
+**Generated:** 2026-06-13 21:37:18
+**Category:** Analytics Dashboard
 
 ---
 
@@ -38,24 +18,24 @@ Preferred visual direction:
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#6366F1` | `--color-primary` |
-| Secondary | `#818CF8` | `--color-secondary` |
-| CTA/Accent | `#10B981` | `--color-cta` |
-| Background | `#F5F3FF` | `--color-background` |
-| Text | `#1E1B4B` | `--color-text` |
+| Primary | `#0F172A` | `--color-primary` |
+| Secondary | `#1E293B` | `--color-secondary` |
+| CTA/Accent | `#22C55E` | `--color-cta` |
+| Background | `#020617` | `--color-background` |
+| Text | `#F8FAFC` | `--color-text` |
 
-**Color Notes:** Indigo primary + emerald CTA
+**Color Notes:** Dark bg + green positive indicators
 
 ### Typography
 
-- **Heading Font:** Crimson Pro
-- **Body Font:** Atkinson Hyperlegible
-- **Mood:** academic, research, scholarly, accessible, readable, educational
-- **Google Fonts:** [Crimson Pro + Atkinson Hyperlegible](https://fonts.google.com/share?selection.family=Atkinson+Hyperlegible:wght@400;700|Crimson+Pro:wght@400;500;600;700)
+- **Heading Font:** Playfair Display SC
+- **Body Font:** Karla
+- **Mood:** restaurant, menu, culinary, elegant, foodie, hospitality
+- **Google Fonts:** [Playfair Display SC + Karla](https://fonts.google.com/share?selection.family=Karla:wght@300;400;500;600;700|Playfair+Display+SC:wght@400;700)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Crimson+Pro:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Karla:wght@300;400;500;600;700&family=Playfair+Display+SC:wght@400;700&display=swap');
 ```
 
 ### Spacing Variables
@@ -88,7 +68,7 @@ Preferred visual direction:
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #10B981;
+  background: #22C55E;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -105,8 +85,8 @@ Preferred visual direction:
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #6366F1;
-  border: 2px solid #6366F1;
+  color: #0F172A;
+  border: 2px solid #0F172A;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -119,7 +99,7 @@ Preferred visual direction:
 
 ```css
 .card {
-  background: #F5F3FF;
+  background: #020617;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -145,9 +125,9 @@ Preferred visual direction:
 }
 
 .input:focus {
-  border-color: #6366F1;
+  border-color: #0F172A;
   outline: none;
-  box-shadow: 0 0 0 3px #6366F120;
+  box-shadow: 0 0 0 3px #0F172A20;
 }
 ```
 
@@ -173,28 +153,28 @@ Preferred visual direction:
 
 ## Style Guidelines
 
-**Style:** Flat Design
+**Style:** Data-Dense Dashboard
 
-**Keywords:** 2D, minimalist, bold colors, no shadows, clean lines, simple shapes, typography-focused, modern, icon-heavy
+**Keywords:** Multiple charts/widgets, data tables, KPI cards, minimal padding, grid layout, space-efficient, maximum data visibility
 
-**Best For:** Web apps, mobile apps, cross-platform, startup MVPs, user-friendly, SaaS, dashboards, corporate
+**Best For:** Business intelligence dashboards, financial analytics, enterprise reporting, operational dashboards, data warehousing
 
-**Key Effects:** No gradients/shadows, simple hover (color/opacity shift), fast loading, clean transitions (150-200ms ease), minimal icons
+**Key Effects:** Hover tooltips, chart zoom on click, row highlighting on hover, smooth filter animations, data loading spinners
 
 ### Page Pattern
 
-**Pattern Name:** Operational SaaS Dashboard
+**Pattern Name:** Enterprise Gateway
 
-- **Workflow Strategy:** Put queues, status, next actions, validation, and audit-friendly feedback ahead of marketing content.
-- **CTA Placement:** Contextual task actions in headers, toolbars, and wizard footers.
-- **Section Order:** 1. Page context, 2. Key metrics or progress, 3. Primary work surface, 4. Supporting activity/timeline.
+- **Conversion Strategy:**  logo carousel,  tab switching for industries, Path selection (I am a...). Mega menu navigation. Trust signals prominent.
+- **CTA Placement:** Contact Sales (Primary) + Login (Secondary)
+- **Section Order:** 1. Hero (Video/Mission), 2. Solutions by Industry, 3. Solutions by Role, 4. Client Logos, 5. Contact Sales
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Complex onboarding flow
-- ❌ Cluttered layout
+- ❌ Ornate design
+- ❌ No filtering
 
 ### Additional Forbidden Patterns
 
