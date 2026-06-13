@@ -7,7 +7,7 @@
 ---
 
 **Project:** JournalPilot
-**Generated:** 2026-06-13 01:03:47
+**Generated:** 2026-06-13 14:01:20
 **Category:** Micro SaaS
 
 ---
@@ -38,13 +38,13 @@ Preferred visual direction:
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#0891B2` | `--color-primary` |
-| Secondary | `#22D3EE` | `--color-secondary` |
-| CTA/Accent | `#22C55E` | `--color-cta` |
-| Background | `#ECFEFF` | `--color-background` |
-| Text | `#164E63` | `--color-text` |
+| Primary | `#6366F1` | `--color-primary` |
+| Secondary | `#818CF8` | `--color-secondary` |
+| CTA/Accent | `#10B981` | `--color-cta` |
+| Background | `#F5F3FF` | `--color-background` |
+| Text | `#1E1B4B` | `--color-text` |
 
-**Color Notes:** Fresh cyan + clean green
+**Color Notes:** Indigo primary + emerald CTA
 
 ### Typography
 
@@ -88,7 +88,7 @@ Preferred visual direction:
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #22C55E;
+  background: #10B981;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -105,8 +105,8 @@ Preferred visual direction:
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #0891B2;
-  border: 2px solid #0891B2;
+  color: #6366F1;
+  border: 2px solid #6366F1;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -119,7 +119,7 @@ Preferred visual direction:
 
 ```css
 .card {
-  background: #ECFEFF;
+  background: #F5F3FF;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -145,9 +145,9 @@ Preferred visual direction:
 }
 
 .input:focus {
-  border-color: #0891B2;
+  border-color: #6366F1;
   outline: none;
-  box-shadow: 0 0 0 3px #0891B220;
+  box-shadow: 0 0 0 3px #6366F120;
 }
 ```
 
@@ -183,11 +183,11 @@ Preferred visual direction:
 
 ### Page Pattern
 
-**Pattern Name:** Minimal Single Column
+**Pattern Name:** Product Review/Ratings Focused
 
-- **Conversion Strategy:** Single CTA focus. Large typography. Lots of whitespace. No nav clutter. Mobile-first.
-- **CTA Placement:** Center, large CTA button
-- **Section Order:** 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer
+- **Conversion Strategy:** User-generated content builds trust. Show verified purchases. Filter by rating. Respond to negative reviews.
+- **CTA Placement:** After reviews summary + Buy button alongside reviews
+- **Section Order:** 1. Hero (product + aggregate rating), 2. Rating breakdown, 3. Individual reviews, 4. Buy/CTA
 
 ---
 
