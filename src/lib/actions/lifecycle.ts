@@ -4,15 +4,14 @@ import { z } from "zod";
 
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import type { ActionResult } from "@/lib/action-result";
+import { withActionErrorHandling } from "@/lib/actions/utils";
 import { AUDIT_ACTIONS, tryWriteAuditLog, type AuditLogDb } from "@/lib/audit";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { assertHasRole } from "@/lib/permissions";
+import { assertAuthorOf, assertHasRole } from "@/lib/permissions";
 import {
   assertServerActionRateLimit,
-  isRateLimitError,
   RATE_LIMIT_SUBJECTS,
-  rateLimitActionError,
 } from "@/lib/rate-limit";
 import {
   transitionStatusWithClient,
@@ -39,291 +38,261 @@ function isTerminalStatus(status: ManuscriptStatus) {
 }
 
 async function limitManuscriptLifecycle(userId: string, manuscriptId: string) {
-  try {
-    await assertServerActionRateLimit({
-      actorType: "USER",
-      actorUserId: userId,
-      manuscriptId,
-      subject: RATE_LIMIT_SUBJECTS.MANUSCRIPT_LIFECYCLE,
-      userId,
-    });
-
-    return null;
-  } catch (error) {
-    if (isRateLimitError(error)) {
-      return rateLimitActionError();
-    }
-
-    throw error;
-  }
+  await assertServerActionRateLimit({
+    actorType: "USER",
+    actorUserId: userId,
+    manuscriptId,
+    subject: RATE_LIMIT_SUBJECTS.MANUSCRIPT_LIFECYCLE,
+    userId,
+  });
 }
 
 export async function softDeleteDraftManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
-  const user = await requireAuth();
-  const parsed = lifecycleSchema.safeParse(input);
+  return withActionErrorHandling(async () => {
+    const user = await requireAuth();
+    const parsed = lifecycleSchema.safeParse(input);
 
-  if (!parsed.success) {
-    return safeError("Choose a valid manuscript.");
-  }
+    if (!parsed.success) {
+      return safeError("Choose a valid manuscript.");
+    }
 
-  const rateLimitError = await limitManuscriptLifecycle(
-    user.id,
-    parsed.data.manuscriptId,
-  );
+    await limitManuscriptLifecycle(user.id, parsed.data.manuscriptId);
+    await assertHasRole(user.id, UserRole.AUTHOR);
 
-  if (rateLimitError) {
-    return rateLimitError;
-  }
+    const manuscript = await prisma.manuscript.findFirst({
+      where: {
+        id: parsed.data.manuscriptId,
+        deletedAt: null,
+        submittingAuthorId: user.id,
+      },
+      select: {
+        status: true,
+      },
+    });
 
-  await assertHasRole(user.id, UserRole.AUTHOR);
+    if (!manuscript) {
+      return safeError("This manuscript is no longer available.");
+    }
 
-  const manuscript = await prisma.manuscript.findFirst({
-    where: {
-      id: parsed.data.manuscriptId,
-      deletedAt: null,
-      submittingAuthorId: user.id,
-    },
-    select: {
-      status: true,
-    },
+    if (manuscript.status !== ManuscriptStatus.DRAFT) {
+      return safeError("Submitted manuscripts must be withdrawn or archived.");
+    }
+
+    await prisma.manuscript.update({
+      where: { id: parsed.data.manuscriptId },
+      data: {
+        deletedAt: new Date(),
+        deletedById: user.id,
+        deletionReason: parsed.data.reason,
+      },
+    });
+
+    await tryWriteAuditLog({
+      action: AUDIT_ACTIONS.MANUSCRIPT_SOFT_DELETED,
+      actorType: "USER",
+      actorUserId: user.id,
+      entityType: "Manuscript",
+      entityId: parsed.data.manuscriptId,
+    });
+
+    return { success: true, data: undefined };
   });
-
-  if (!manuscript) {
-    return safeError("This manuscript is no longer available.");
-  }
-
-  if (manuscript.status !== ManuscriptStatus.DRAFT) {
-    return safeError("Submitted manuscripts must be withdrawn or archived.");
-  }
-
-  await prisma.manuscript.update({
-    where: { id: parsed.data.manuscriptId },
-    data: {
-      deletedAt: new Date(),
-      deletedById: user.id,
-      deletionReason: parsed.data.reason,
-    },
-  });
-
-  await tryWriteAuditLog({
-    action: AUDIT_ACTIONS.MANUSCRIPT_SOFT_DELETED,
-    actorType: "USER",
-    actorUserId: user.id,
-    entityType: "Manuscript",
-    entityId: parsed.data.manuscriptId,
-  });
-
-  return { success: true, data: undefined };
 }
 
 export async function restoreManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
-  const user = await requireAuth();
-  const parsed = lifecycleSchema.safeParse(input);
+  return withActionErrorHandling(async () => {
+    const user = await requireAuth();
+    const parsed = lifecycleSchema.safeParse(input);
 
-  if (!parsed.success) {
-    return safeError("Choose a valid manuscript.");
-  }
+    if (!parsed.success) {
+      return safeError("Choose a valid manuscript.");
+    }
 
-  const [rateLimitError] = await Promise.all([
-    limitManuscriptLifecycle(user.id, parsed.data.manuscriptId),
-    assertHasRole(user.id, UserRole.ADMIN),
-  ]);
+    await Promise.all([
+      limitManuscriptLifecycle(user.id, parsed.data.manuscriptId),
+      assertHasRole(user.id, UserRole.ADMIN),
+    ]);
 
-  if (rateLimitError) {
-    return rateLimitError;
-  }
+    const manuscript = await prisma.manuscript.findFirst({
+      where: {
+        id: parsed.data.manuscriptId,
+      },
+      select: {
+        deletedAt: true,
+      },
+    });
 
-  const manuscript = await prisma.manuscript.findFirst({
-    where: {
-      id: parsed.data.manuscriptId,
-    },
-    select: {
-      deletedAt: true,
-    },
+    if (!manuscript) {
+      return safeError("This manuscript is no longer available.");
+    }
+
+    if (!manuscript.deletedAt) {
+      return safeError("Only deleted manuscripts can be restored.");
+    }
+
+    await prisma.manuscript.update({
+      where: { id: parsed.data.manuscriptId },
+      data: {
+        deletedAt: null,
+        deletedById: null,
+        deletionReason: null,
+      },
+    });
+
+    await tryWriteAuditLog({
+      action: "MANUSCRIPT_RESTORED",
+      actorType: "USER",
+      actorUserId: user.id,
+      entityType: "Manuscript",
+      entityId: parsed.data.manuscriptId,
+    });
+
+    return { success: true, data: undefined };
   });
-
-  if (!manuscript) {
-    return safeError("This manuscript is no longer available.");
-  }
-
-  if (!manuscript.deletedAt) {
-    return safeError("Only deleted manuscripts can be restored.");
-  }
-
-  await prisma.manuscript.update({
-    where: { id: parsed.data.manuscriptId },
-    data: {
-      deletedAt: null,
-      deletedById: null,
-      deletionReason: null,
-    },
-  });
-
-  await tryWriteAuditLog({
-    action: "MANUSCRIPT_RESTORED",
-    actorType: "USER",
-    actorUserId: user.id,
-    entityType: "Manuscript",
-    entityId: parsed.data.manuscriptId,
-  });
-
-  return { success: true, data: undefined };
 }
 
 export async function archiveManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
-  const user = await requireAuth();
-  const parsed = lifecycleSchema.safeParse(input);
+  return withActionErrorHandling(async () => {
+    const user = await requireAuth();
+    const parsed = lifecycleSchema.safeParse(input);
 
-  if (!parsed.success) {
-    return safeError("Choose a valid manuscript.");
-  }
+    if (!parsed.success) {
+      return safeError("Choose a valid manuscript.");
+    }
 
-  const [rateLimitError] = await Promise.all([
-    limitManuscriptLifecycle(user.id, parsed.data.manuscriptId),
-    assertHasRole(user.id, UserRole.ADMIN),
-  ]);
+    await Promise.all([
+      limitManuscriptLifecycle(user.id, parsed.data.manuscriptId),
+      assertHasRole(user.id, UserRole.ADMIN),
+    ]);
 
-  if (rateLimitError) {
-    return rateLimitError;
-  }
+    const manuscript = await prisma.manuscript.findFirst({
+      where: {
+        id: parsed.data.manuscriptId,
+        deletedAt: null,
+      },
+      select: {
+        archivedAt: true,
+        status: true,
+      },
+    });
 
-  const manuscript = await prisma.manuscript.findFirst({
-    where: {
-      id: parsed.data.manuscriptId,
-      deletedAt: null,
-    },
-    select: {
-      archivedAt: true,
-      status: true,
-    },
+    if (!manuscript) {
+      return safeError("This manuscript is no longer available.");
+    }
+
+    if (manuscript.archivedAt) {
+      return safeError("This manuscript is already archived.");
+    }
+
+    if (isTerminalStatus(manuscript.status)) {
+      return safeError("Withdrawn or decided manuscripts cannot be archived.");
+    }
+
+    await prisma.manuscript.update({
+      where: { id: parsed.data.manuscriptId },
+      data: {
+        archivedAt: new Date(),
+      },
+    });
+
+    await tryWriteAuditLog({
+      action: AUDIT_ACTIONS.MANUSCRIPT_ARCHIVED,
+      actorType: "USER",
+      actorUserId: user.id,
+      entityType: "Manuscript",
+      entityId: parsed.data.manuscriptId,
+    });
+
+    return { success: true, data: undefined };
   });
-
-  if (!manuscript) {
-    return safeError("This manuscript is no longer available.");
-  }
-
-  if (manuscript.archivedAt) {
-    return safeError("This manuscript is already archived.");
-  }
-
-  if (isTerminalStatus(manuscript.status)) {
-    return safeError("Withdrawn or decided manuscripts cannot be archived.");
-  }
-
-  await prisma.manuscript.update({
-    where: { id: parsed.data.manuscriptId },
-    data: {
-      archivedAt: new Date(),
-    },
-  });
-
-  await tryWriteAuditLog({
-    action: AUDIT_ACTIONS.MANUSCRIPT_ARCHIVED,
-    actorType: "USER",
-    actorUserId: user.id,
-    entityType: "Manuscript",
-    entityId: parsed.data.manuscriptId,
-  });
-
-  return { success: true, data: undefined };
 }
 
 export async function withdrawManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
-  const user = await requireAuth();
-  const parsed = lifecycleSchema.safeParse(input);
+  return withActionErrorHandling(async () => {
+    const user = await requireAuth();
+    const parsed = lifecycleSchema.safeParse(input);
 
-  if (!parsed.success) {
-    return safeError("Choose a valid manuscript.");
-  }
+    if (!parsed.success) {
+      return safeError("Choose a valid manuscript.");
+    }
 
-  const rateLimitError = await limitManuscriptLifecycle(
-    user.id,
-    parsed.data.manuscriptId,
-  );
+    await limitManuscriptLifecycle(user.id, parsed.data.manuscriptId);
+    await assertAuthorOf(user.id, parsed.data.manuscriptId);
 
-  if (rateLimitError) {
-    return rateLimitError;
-  }
+    await prisma.$transaction(async (tx) => {
+      await transitionStatusWithClient(tx as unknown as StatusMachineDb & AuditLogDb, {
+        actor: { type: "USER", userId: user.id },
+        manuscriptId: parsed.data.manuscriptId,
+        note: parsed.data.reason,
+        toStatus: ManuscriptStatus.WITHDRAWN,
+      });
 
-  await prisma.$transaction(async (tx) => {
-    await transitionStatusWithClient(tx as unknown as StatusMachineDb & AuditLogDb, {
-      actor: { type: "USER", userId: user.id },
-      manuscriptId: parsed.data.manuscriptId,
-      note: parsed.data.reason,
-      toStatus: ManuscriptStatus.WITHDRAWN,
+      await tx.manuscript.update({
+        where: { id: parsed.data.manuscriptId },
+        data: {
+          withdrawnById: user.id,
+          withdrawalReason: parsed.data.reason,
+        },
+      });
     });
 
-    await tx.manuscript.update({
-      where: { id: parsed.data.manuscriptId },
-      data: {
-        withdrawnById: user.id,
-        withdrawalReason: parsed.data.reason,
-      },
-    });
+    return { success: true, data: undefined };
   });
-
-  return { success: true, data: undefined };
 }
 
 export async function hardDeleteDraftManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
-  const user = await requireAuth();
-  const parsed = lifecycleSchema.safeParse(input);
+  return withActionErrorHandling(async () => {
+    const user = await requireAuth();
+    const parsed = lifecycleSchema.safeParse(input);
 
-  if (!parsed.success) {
-    return safeError("Choose a valid manuscript.");
-  }
+    if (!parsed.success) {
+      return safeError("Choose a valid manuscript.");
+    }
 
-  const rateLimitError = await limitManuscriptLifecycle(
-    user.id,
-    parsed.data.manuscriptId,
-  );
+    await limitManuscriptLifecycle(user.id, parsed.data.manuscriptId);
+    await assertHasRole(user.id, UserRole.AUTHOR);
 
-  if (rateLimitError) {
-    return rateLimitError;
-  }
+    const manuscript = await prisma.manuscript.findFirst({
+      where: {
+        id: parsed.data.manuscriptId,
+        deletedAt: null,
+        submittingAuthorId: user.id,
+      },
+      select: {
+        status: true,
+      },
+    });
 
-  await assertHasRole(user.id, UserRole.AUTHOR);
+    if (!manuscript) {
+      return safeError("This manuscript is no longer available.");
+    }
 
-  const manuscript = await prisma.manuscript.findFirst({
-    where: {
-      id: parsed.data.manuscriptId,
-      deletedAt: null,
-      submittingAuthorId: user.id,
-    },
-    select: {
-      status: true,
-    },
+    if (manuscript.status !== ManuscriptStatus.DRAFT) {
+      return safeError("Only drafts can be permanently deleted.");
+    }
+
+    await prisma.manuscript.delete({
+      where: { id: parsed.data.manuscriptId },
+    });
+
+    await tryWriteAuditLog({
+      action: AUDIT_ACTIONS.DRAFT_HARD_DELETED,
+      actorType: "USER",
+      actorUserId: user.id,
+      entityType: "Manuscript",
+      entityId: parsed.data.manuscriptId,
+    });
+
+    return { success: true, data: undefined };
   });
-
-  if (!manuscript) {
-    return safeError("This manuscript is no longer available.");
-  }
-
-  if (manuscript.status !== ManuscriptStatus.DRAFT) {
-    return safeError("Only drafts can be permanently deleted.");
-  }
-
-  await prisma.manuscript.delete({
-    where: { id: parsed.data.manuscriptId },
-  });
-
-  await tryWriteAuditLog({
-    action: AUDIT_ACTIONS.DRAFT_HARD_DELETED,
-    actorType: "USER",
-    actorUserId: user.id,
-    entityType: "Manuscript",
-    entityId: parsed.data.manuscriptId,
-  });
-
-  return { success: true, data: undefined };
 }
