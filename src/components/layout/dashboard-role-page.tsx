@@ -1,7 +1,14 @@
+import Link from "next/link";
+
 import { UserRole } from "@/generated/prisma/enums";
+import { AccessDeniedError } from "@/lib/access-errors";
 import { requireCurrentUser } from "@/lib/auth";
 import { assertHasRole } from "@/lib/permissions";
-import { ROLE_LABELS } from "@/lib/roles";
+import {
+  resolveDefaultDashboardRole,
+  ROLE_LABELS,
+  roleDashboardPath,
+} from "@/lib/roles";
 
 type DashboardRolePageProps = {
   role: UserRole;
@@ -16,7 +23,39 @@ const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
 
 export async function DashboardRolePage({ role }: DashboardRolePageProps) {
   const user = await requireCurrentUser();
-  await assertHasRole(user.id, role);
+
+  try {
+    await assertHasRole(user.id, role);
+  } catch (error) {
+    if (!(error instanceof AccessDeniedError)) {
+      throw error;
+    }
+
+    const fallbackRole = resolveDefaultDashboardRole(user);
+
+    return (
+      <section className="space-y-6">
+        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
+          <p className="text-sm font-medium uppercase text-primary">
+            Access denied
+          </p>
+          <h2 className="mt-2 font-serif text-3xl font-semibold text-card-foreground">
+            {ROLE_LABELS[role]} workspace unavailable
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+            Your account does not currently include the {ROLE_LABELS[role]} role.
+            Ask an administrator to assign that role if you need this workspace.
+          </p>
+          <Link
+            className="mt-5 inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            href={roleDashboardPath(fallbackRole)}
+          >
+            Go to {ROLE_LABELS[fallbackRole]} workspace
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">
