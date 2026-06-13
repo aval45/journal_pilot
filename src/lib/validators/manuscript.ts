@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  isAllowedUploadFile,
+  MAX_MANUSCRIPT_FILE_SIZE,
+  UPLOAD_FILE_CATEGORIES,
+} from "@/lib/file-policy";
+
 export const manuscriptKeywordSchema = z
   .string()
   .trim()
@@ -71,6 +77,40 @@ export const reorderCoAuthorsSchema = z.object({
   authorIds: z.array(z.string().trim().min(1)).min(1),
   manuscriptId: z.string().trim().min(1, "Choose a manuscript."),
 });
+
+export const uploadMetadataSchema = z
+  .object({
+    fileCategory: z.enum(UPLOAD_FILE_CATEGORIES),
+    fileName: z
+      .string()
+      .trim()
+      .min(1, "File name is required.")
+      .max(255, "File name must be 255 characters or fewer."),
+    fileSize: z
+      .number()
+      .int()
+      .positive()
+      .max(MAX_MANUSCRIPT_FILE_SIZE, "File must be 50 MB or smaller."),
+    manuscriptId: z.string().trim().min(1, "Choose a manuscript."),
+    mimeType: z.string().trim().min(1, "File type is required.").max(200),
+    sha256: z
+      .string()
+      .trim()
+      .regex(/^[a-f0-9]{64}$/i, "SHA-256 must be a 64 character hex digest.")
+      .optional(),
+  })
+  .refine(
+    (value) =>
+      isAllowedUploadFile({
+        fileName: value.fileName,
+        fileSize: value.fileSize,
+        mimeType: value.mimeType,
+      }),
+    {
+      message: "Choose an accepted file type under 50 MB.",
+      path: ["fileName"],
+    },
+  );
 
 export function parseKeywordsInput(value: string) {
   return value

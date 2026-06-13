@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
 
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import type { ActionResult } from "@/lib/action-result";
 import { requireCurrentUser } from "@/lib/auth";
+import { sanitizeFileName } from "@/lib/file-policy";
 import { prisma } from "@/lib/prisma";
 import { assertAuthorOf, assertHasRole } from "@/lib/permissions";
 import {
@@ -19,7 +21,9 @@ import {
   createDraftShellSchema,
   removeCoAuthorSchema,
   reorderCoAuthorsSchema,
+  uploadMetadataSchema,
 } from "@/lib/validators/manuscript";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 async function limitDraftMutation(userId: string) {
   try {
@@ -385,4 +389,95 @@ export async function reorderCoAuthorsAction(
   revalidatePath(`/dashboard/author/manuscripts/${parsed.data.manuscriptId}`);
 
   return { success: true, data: undefined };
+}
+
+function getManuscriptFilesBucket() {
+  return process.env.MANUSCRIPT_FILES_BUCKET ?? "manuscript-files";
+}
+
+export async function createManuscriptUploadUrlAction(
+  input: unknown,
+): Promise<
+  ActionResult<{
+    bucket: string;
+    fileId: string;
+    path: string;
+    token: string;
+  }>
+> {
+  const parsed = uploadMetadataSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return { success: false, error: "Choose an accepted file under 50 MB." };
+  }
+
+  const user = await requireCurrentUser();
+
+  try {
+    await assertServerActionRateLimit({
+      actorType: "USER",
+      actorUserId: user.id,
+      subject: RATE_LIMIT_SUBJECTS.FILE_METADATA_CREATE,
+      userId: user.id,
+    });
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      return rateLimitActionError();
+    }
+
+    throw error;
+  }
+
+  const canEdit = await assertEditableDraftForAuthor(
+    user.id,
+    parsed.data.manuscriptId,
+  );
+
+  if (!canEdit) {
+    return { success: false, error: "Only draft manuscripts can accept uploads." };
+  }
+
+  const fileId = randomUUID();
+  const safeFileName = sanitizeFileName(parsed.data.fileName);
+  const filePath = `${user.id}/manuscripts/${parsed.data.manuscriptId}/${fileId}-${safeFileName}`;
+  const bucket = getManuscriptFilesBucket();
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUploadUrl(filePath, { upsert: false });
+
+  if (error || !data?.token) {
+    return {
+      success: false,
+      error:
+        "We could not prepare the upload. Confirm the private manuscript bucket exists.",
+    };
+  }
+
+  await prisma.manuscriptFile.create({
+    data: {
+      fileCategory: parsed.data.fileCategory,
+      fileName: safeFileName,
+      filePath,
+      fileSize: parsed.data.fileSize,
+      id: fileId,
+      manuscriptId: parsed.data.manuscriptId,
+      mimeType: parsed.data.mimeType,
+      sha256: parsed.data.sha256,
+      storageBucket: bucket,
+      uploadedById: user.id,
+    },
+  });
+
+  revalidatePath(`/dashboard/author/manuscripts/${parsed.data.manuscriptId}`);
+
+  return {
+    success: true,
+    data: {
+      bucket,
+      fileId,
+      path: data.path,
+      token: data.token,
+    },
+  };
 }

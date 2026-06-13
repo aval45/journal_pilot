@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 
 import { CoAuthorPanel } from "@/components/submission/co-author-panel";
+import { FileUploadCard } from "@/components/submission/file-upload-card";
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
+import { formatFileSize } from "@/lib/file-policy";
 import { requireCurrentUser } from "@/lib/auth";
 import { getAuthorManuscriptDetail } from "@/lib/data/manuscript-detail";
 import { assertHasRole } from "@/lib/permissions";
@@ -75,6 +77,39 @@ export default async function AuthorManuscriptPage({
             editable={editable}
             manuscriptId={manuscript.id}
           />
+          {editable ? <FileUploadCard manuscriptId={manuscript.id} /> : null}
+          <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+            <h3 className="font-serif text-2xl font-semibold text-card-foreground">
+              Uploaded files
+            </h3>
+            <div className="mt-5 divide-y divide-border rounded-md border border-border">
+              {manuscript.files.length === 0 ? (
+                <div className="p-4 text-sm text-muted-foreground">
+                  No files have been uploaded yet.
+                </div>
+              ) : (
+                manuscript.files.map((file) => (
+                  <div
+                    className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    key={file.id}
+                  >
+                    <div>
+                      <p className="font-semibold text-card-foreground">
+                        {file.fileName}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {file.fileCategory.replaceAll("_", " ")} ·{" "}
+                        {file.mimeType} · {formatFileSize(file.fileSize)}
+                      </p>
+                    </div>
+                    <span className="w-fit rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground">
+                      Revision {file.revisionNumber}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
         </div>
 
         <aside className="rounded-lg border border-border bg-card p-6 shadow-sm">
