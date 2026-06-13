@@ -216,7 +216,7 @@ async function seed() {
   const year = new Date().getUTCFullYear();
 
   try {
-    for (const journalSeed of JOURNALS) {
+    await Promise.all(JOURNALS.map(async (journalSeed) => {
       const journal = await upsertActiveJournal(prisma, {
         description: journalSeed.description,
         name: journalSeed.name,
@@ -225,26 +225,27 @@ async function seed() {
 
       journalsBySlug.set(journal.slug, { id: journal.id });
 
-      for (const articleType of journalSeed.articleTypes) {
-        await upsertActiveArticleType(prisma, journal.id, articleType);
-      }
-
-      await prisma.manuscriptCounter.upsert({
-        where: {
-          journalId_year: {
+      await Promise.all([
+        ...journalSeed.articleTypes.map((articleType) =>
+          upsertActiveArticleType(prisma, journal.id, articleType),
+        ),
+        prisma.manuscriptCounter.upsert({
+          where: {
+            journalId_year: {
+              journalId: journal.id,
+              year,
+            },
+          },
+          update: {},
+          create: {
             journalId: journal.id,
             year,
           },
-        },
-        update: {},
-        create: {
-          journalId: journal.id,
-          year,
-        },
-      });
-    }
+        }),
+      ]);
+    }));
 
-    for (const template of EMAIL_TEMPLATES) {
+    await Promise.all(EMAIL_TEMPLATES.map((template) => {
       const journalId = template.journalSlug
         ? (journalsBySlug.get(template.journalSlug)?.id ?? null)
         : null;
@@ -253,8 +254,8 @@ async function seed() {
         throw new Error(`Missing seeded journal ${template.journalSlug}.`);
       }
 
-      await upsertActiveEmailTemplate(prisma, template, journalId);
-    }
+      return upsertActiveEmailTemplate(prisma, template, journalId);
+    }));
   } finally {
     await prisma.$disconnect();
   }

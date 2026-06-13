@@ -54,6 +54,7 @@ export function AuthForm({
             {field.label}
           </label>
           <input
+            aria-label={field.label}
             id={field.name}
             name={field.name}
             type={field.type}

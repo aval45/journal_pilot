@@ -1,11 +1,23 @@
 import { AuthForm } from "@/components/auth/auth-form";
 import { AuthPanel } from "@/components/auth/auth-panel";
 import { registerAction } from "@/lib/actions/auth";
-import { initialAuthActionState } from "@/lib/actions/auth-state";
+import {
+  initialAuthActionState,
+  type AuthActionState,
+} from "@/lib/actions/auth-state";
 
 export const metadata = {
   title: "Register",
 };
+
+async function register(
+  previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  "use server";
+
+  return registerAction(previousState, formData);
+}
 
 export default function RegisterPage() {
   return (
@@ -15,7 +27,7 @@ export default function RegisterPage() {
       description="Start with an author account. Additional roles can be assigned by an admin later."
     >
       <AuthForm
-        action={registerAction}
+        action={register}
         initialState={initialAuthActionState}
         submitLabel="Create account"
         fields={[

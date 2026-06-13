@@ -6,13 +6,13 @@ import {
   UPLOAD_FILE_CATEGORIES,
 } from "@/lib/file-policy";
 
-export const manuscriptKeywordSchema = z
+const manuscriptKeywordSchema = z
   .string()
   .trim()
   .min(1, "Keyword is required.")
   .max(80, "Each keyword must be 80 characters or fewer.");
 
-export const manuscriptTextSchema = {
+const manuscriptTextSchema = {
   abstract: z
     .string()
     .trim()
@@ -129,6 +129,9 @@ export const submitManuscriptSchema = z.object({
 export function parseKeywordsInput(value: string) {
   return value
     .split(",")
-    .map((keyword) => keyword.trim())
-    .filter(Boolean);
+    .flatMap((keyword) => {
+      const trimmed = keyword.trim();
+
+      return trimmed ? [trimmed] : [];
+    });
 }

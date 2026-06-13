@@ -36,10 +36,4 @@ export async function createSupabaseProxyContext(request: NextRequest) {
   return { response, user };
 }
 
-export async function updateSupabaseSession(request: NextRequest) {
-  const { response } = await createSupabaseProxyContext(request);
-
-  return response;
-}
-
 export type SupabaseProxyUser = User;

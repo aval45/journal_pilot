@@ -7,11 +7,11 @@ const mocks = vi.hoisted(() => ({
   assertServerActionRateLimit: vi.fn(),
   manuscriptDelete: vi.fn(),
   manuscriptFindFirst: vi.fn(),
-  requireCurrentUser: vi.fn(),
+  requireAuth: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
-  requireCurrentUser: mocks.requireCurrentUser,
+  requireAuth: mocks.requireAuth,
 }));
 
 vi.mock("@/lib/permissions", () => ({
@@ -57,7 +57,7 @@ vi.mock("@/lib/status-machine", () => ({
 
 describe("manuscript lifecycle actions", () => {
   test("does not hard delete a submitted manuscript", async () => {
-    mocks.requireCurrentUser.mockResolvedValue({ id: "author-1" });
+    mocks.requireAuth.mockResolvedValue({ id: "author-1" });
     mocks.assertServerActionRateLimit.mockResolvedValue(undefined);
     mocks.assertAuthorOf.mockResolvedValue(undefined);
     mocks.manuscriptFindFirst.mockResolvedValue({

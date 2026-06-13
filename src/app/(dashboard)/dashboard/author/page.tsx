@@ -22,12 +22,14 @@ const STATUS_LABELS: Record<string, string> = {
   WITH_EDITOR: "With editor",
 };
 
+const DATE_FORMATTER = new Intl.DateTimeFormat("en", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
 function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  return DATE_FORMATTER.format(date);
 }
 
 export default async function AuthorDashboardPage() {

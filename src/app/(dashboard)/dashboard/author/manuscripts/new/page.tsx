@@ -5,9 +5,11 @@ import { getSubmissionWizardOptions } from "@/lib/data/submission-options";
 import { assertHasRole } from "@/lib/permissions";
 
 export default async function NewManuscriptPage() {
-  const user = await requireCurrentUser();
+  const [user, journals] = await Promise.all([
+    requireCurrentUser(),
+    getSubmissionWizardOptions(),
+  ]);
   await assertHasRole(user.id, UserRole.AUTHOR);
-  const journals = await getSubmissionWizardOptions();
 
   return (
     <section className="mx-auto max-w-[1200px] space-y-6">

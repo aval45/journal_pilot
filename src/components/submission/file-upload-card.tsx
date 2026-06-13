@@ -10,7 +10,6 @@ import {
   isAllowedUploadFile,
   UPLOAD_FILE_CATEGORIES,
 } from "@/lib/file-policy";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type FileUploadCardProps = {
   manuscriptId: string;
@@ -65,19 +64,19 @@ export function FileUploadCard({ manuscriptId }: FileUploadCardProps) {
         return;
       }
 
-      const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.storage
-        .from(signedUpload.data.bucket)
-        .uploadToSignedUrl(
-          signedUpload.data.path,
-          signedUpload.data.token,
-          file,
-          {
-            contentType: file.type,
-          },
-        );
+      const uploadBody = new FormData();
+      uploadBody.append("cacheControl", "3600");
+      uploadBody.append("", file);
 
-      if (error) {
+      const uploadResponse = await fetch(signedUpload.data.signedUrl, {
+        body: uploadBody,
+        headers: {
+          "x-upsert": "false",
+        },
+        method: "PUT",
+      });
+
+      if (!uploadResponse.ok) {
         setMessage("Upload failed. Please try again.");
         return;
       }

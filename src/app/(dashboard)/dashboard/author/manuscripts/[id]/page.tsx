@@ -32,13 +32,14 @@ type ManuscriptPageProps = {
 export default async function AuthorManuscriptPage({
   params,
 }: ManuscriptPageProps) {
-  const { id } = await params;
-  const user = await requireCurrentUser();
-  await assertHasRole(user.id, UserRole.AUTHOR);
-  const manuscript = await getAuthorManuscriptDetail({
-    manuscriptId: id,
-    userId: user.id,
-  });
+  const [{ id }, user] = await Promise.all([params, requireCurrentUser()]);
+  const [, manuscript] = await Promise.all([
+    assertHasRole(user.id, UserRole.AUTHOR),
+    getAuthorManuscriptDetail({
+      manuscriptId: id,
+      userId: user.id,
+    }),
+  ]);
 
   if (!manuscript) {
     notFound();

@@ -1,6 +1,6 @@
 import { UserRole } from "@/generated/prisma/enums";
 
-export const ROLE_ORDER = [
+const ROLE_ORDER = [
   UserRole.AUTHOR,
   UserRole.REVIEWER,
   UserRole.EDITOR,
@@ -14,18 +14,11 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: "Admin",
 };
 
-export const ROLE_SEGMENTS: Record<UserRole, string> = {
+const ROLE_SEGMENTS: Record<UserRole, string> = {
   AUTHOR: "author",
   REVIEWER: "reviewer",
   EDITOR: "editor",
   ADMIN: "admin",
-};
-
-export const SEGMENT_ROLES: Record<string, UserRole> = {
-  author: UserRole.AUTHOR,
-  reviewer: UserRole.REVIEWER,
-  editor: UserRole.EDITOR,
-  admin: UserRole.ADMIN,
 };
 
 export function roleDashboardPath(role: UserRole) {

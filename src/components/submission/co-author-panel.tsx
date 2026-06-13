@@ -30,7 +30,6 @@ export function CoAuthorPanel({
   editable,
   manuscriptId,
 }: CoAuthorPanelProps) {
-  const [orderedAuthors, setOrderedAuthors] = useState(authors);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [affiliation, setAffiliation] = useState("");
@@ -38,17 +37,16 @@ export function CoAuthorPanel({
   const [isPending, startTransition] = useTransition();
 
   function moveAuthor(authorId: string, direction: -1 | 1) {
-    const index = orderedAuthors.findIndex((author) => author.id === authorId);
+    const index = authors.findIndex((author) => author.id === authorId);
     const nextIndex = index + direction;
 
-    if (index <= 0 || nextIndex <= 0 || nextIndex >= orderedAuthors.length) {
+    if (index <= 0 || nextIndex <= 0 || nextIndex >= authors.length) {
       return;
     }
 
-    const nextAuthors = [...orderedAuthors];
+    const nextAuthors = [...authors];
     const [author] = nextAuthors.splice(index, 1);
     nextAuthors.splice(nextIndex, 0, author);
-    setOrderedAuthors(nextAuthors);
     setMessage(null);
     startTransition(async () => {
       const result = await reorderCoAuthorsAction({
@@ -57,6 +55,9 @@ export function CoAuthorPanel({
       });
 
       setMessage(result.success ? "Author order saved." : result.error);
+      if (result.success) {
+        window.location.reload();
+      }
     });
   }
 
@@ -96,10 +97,8 @@ export function CoAuthorPanel({
         return;
       }
 
-      setOrderedAuthors((current) =>
-        current.filter((author) => author.id !== authorId),
-      );
-      setMessage("Co-author removed.");
+      setMessage("Co-author removed. Refreshing author list.");
+      window.location.reload();
     });
   }
 
@@ -122,7 +121,7 @@ export function CoAuthorPanel({
       ) : null}
 
       <div className="mt-5 divide-y divide-border rounded-md border border-border">
-        {orderedAuthors.map((author, index) => (
+        {authors.map((author, index) => (
           <div
             className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
             key={author.id}
@@ -165,7 +164,7 @@ export function CoAuthorPanel({
                   className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-border transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={
                     author.isPrimary ||
-                    index === orderedAuthors.length - 1 ||
+                    index === authors.length - 1 ||
                     isPending
                   }
                   onClick={() => moveAuthor(author.id, 1)}

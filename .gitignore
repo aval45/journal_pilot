@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# local scanner config for machine-specific ignored files
+doctor.config.json
+
 # vercel
 .vercel
 

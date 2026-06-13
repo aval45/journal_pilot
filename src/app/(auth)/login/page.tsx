@@ -1,11 +1,23 @@
 import { AuthForm } from "@/components/auth/auth-form";
 import { AuthPanel } from "@/components/auth/auth-panel";
 import { loginAction } from "@/lib/actions/auth";
-import { initialAuthActionState } from "@/lib/actions/auth-state";
+import {
+  initialAuthActionState,
+  type AuthActionState,
+} from "@/lib/actions/auth-state";
 
 export const metadata = {
   title: "Login",
 };
+
+async function login(
+  previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  "use server";
+
+  return loginAction(previousState, formData);
+}
 
 export default function LoginPage() {
   return (
@@ -15,7 +27,7 @@ export default function LoginPage() {
       description="Access your manuscript, review, editorial, or admin workspace."
     >
       <AuthForm
-        action={loginAction}
+        action={login}
         initialState={initialAuthActionState}
         submitLabel="Sign in"
         fields={[

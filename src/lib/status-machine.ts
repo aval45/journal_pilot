@@ -438,8 +438,6 @@ export async function transitionStatusWithClient(
     throw new AccessDeniedError();
   }
 
-  await assertCanTransitionWithClient(db, actor, manuscriptId, toStatus);
-
   if (
     manuscript.status === ManuscriptStatus.DRAFT &&
     toStatus === ManuscriptStatus.SUBMITTED &&
@@ -448,6 +446,8 @@ export async function transitionStatusWithClient(
   ) {
     throw new Error("Submitted manuscripts must have a displayId.");
   }
+
+  await assertCanTransitionWithClient(db, actor, manuscriptId, toStatus);
 
   const updated = await db.manuscript.update({
     where: { id: manuscriptId },
@@ -459,21 +459,6 @@ export async function transitionStatusWithClient(
     },
   });
 
-  await db.manuscriptStatusHistory.create({
-    data: {
-      manuscriptId,
-      fromStatus: manuscript.status,
-      toStatus,
-      actorType:
-        actor.type === "USER"
-          ? StatusChangeActorType.USER
-          : StatusChangeActorType.SYSTEM,
-      changedById: actor.type === "USER" ? actor.userId : null,
-      systemAction: actor.type === "SYSTEM" ? actor.systemAction : null,
-      note,
-    },
-  });
-
   const auditAction =
     toStatus === ManuscriptStatus.SUBMITTED
       ? AUDIT_ACTIONS.MANUSCRIPT_SUBMITTED
@@ -481,17 +466,33 @@ export async function transitionStatusWithClient(
         ? AUDIT_ACTIONS.MANUSCRIPT_WITHDRAWN
         : "MANUSCRIPT_STATUS_CHANGED";
 
-  await writeAuditLogWithClient(db, {
-    action: auditAction,
-    actorType: actor.type === "USER" ? "USER" : "SYSTEM",
-    actorUserId: actor.type === "USER" ? actor.userId : null,
-    entityId: manuscriptId,
-    entityType: "Manuscript",
-    metadata: {
-      fromStatus: manuscript.status,
-      toStatus,
-    },
-  });
+  await Promise.all([
+    db.manuscriptStatusHistory.create({
+      data: {
+        manuscriptId,
+        fromStatus: manuscript.status,
+        toStatus,
+        actorType:
+          actor.type === "USER"
+            ? StatusChangeActorType.USER
+            : StatusChangeActorType.SYSTEM,
+        changedById: actor.type === "USER" ? actor.userId : null,
+        systemAction: actor.type === "SYSTEM" ? actor.systemAction : null,
+        note,
+      },
+    }),
+    writeAuditLogWithClient(db, {
+      action: auditAction,
+      actorType: actor.type === "USER" ? "USER" : "SYSTEM",
+      actorUserId: actor.type === "USER" ? actor.userId : null,
+      entityId: manuscriptId,
+      entityType: "Manuscript",
+      metadata: {
+        fromStatus: manuscript.status,
+        toStatus,
+      },
+    }),
+  ]);
 
   return updated;
 }

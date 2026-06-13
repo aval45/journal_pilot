@@ -2,10 +2,6 @@ import "server-only";
 
 type WhereInput = Record<string, unknown>;
 
-export const activeRecordWhere = {
-  deletedAt: null,
-} as const;
-
 export function withActiveRecord<TWhere extends WhereInput>(where?: TWhere) {
   return {
     ...(where ?? {}),

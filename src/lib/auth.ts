@@ -52,6 +52,10 @@ export async function requireCurrentUser() {
   return user;
 }
 
+export async function requireAuth() {
+  return requireCurrentUser();
+}
+
 export async function requireCurrentUserOrRedirect() {
   const user = await getCurrentUser();
 

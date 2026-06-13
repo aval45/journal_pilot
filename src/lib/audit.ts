@@ -88,25 +88,24 @@ export function sanitizeAuditMetadata(
     return null;
   }
 
-  return Object.fromEntries(
-    Object.entries(metadata)
-      .filter(([key]) => !isSensitiveKey(key))
-      .map(([key, value]) => {
-        if (Array.isArray(value)) {
-          return [
-            key,
-            value.map((item) =>
-              isRecord(item) ? sanitizeAuditMetadata(item) : item,
-            ),
-          ];
-        }
+  const sanitizedEntries: Array<[string, AuditMetadata[keyof AuditMetadata]]> = [];
 
-        return [
-          key,
-          isRecord(value) ? sanitizeAuditMetadata(value) : value,
-        ];
-      }),
-  );
+  for (const [key, value] of Object.entries(metadata)) {
+    if (isSensitiveKey(key)) {
+      continue;
+    }
+
+    sanitizedEntries.push([
+      key,
+      Array.isArray(value)
+        ? value.map((item) => (isRecord(item) ? sanitizeAuditMetadata(item) : item))
+        : isRecord(value)
+          ? sanitizeAuditMetadata(value)
+          : value,
+    ]);
+  }
+
+  return Object.fromEntries(sanitizedEntries);
 }
 
 export function hashAuditValue(value: string) {

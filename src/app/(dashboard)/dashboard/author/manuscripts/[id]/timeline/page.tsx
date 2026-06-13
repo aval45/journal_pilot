@@ -10,23 +10,26 @@ type TimelinePageProps = {
   params: Promise<{ id: string }>;
 };
 
+const TIMELINE_DATE_FORMATTER = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return TIMELINE_DATE_FORMATTER.format(date);
 }
 
 export default async function ManuscriptTimelinePage({
   params,
 }: TimelinePageProps) {
-  const { id } = await params;
-  const user = await requireCurrentUser();
-  await assertHasRole(user.id, UserRole.AUTHOR);
-  const manuscript = await getAuthorManuscriptDetail({
-    manuscriptId: id,
-    userId: user.id,
-  });
+  const [{ id }, user] = await Promise.all([params, requireCurrentUser()]);
+  const [, manuscript] = await Promise.all([
+    assertHasRole(user.id, UserRole.AUTHOR),
+    getAuthorManuscriptDetail({
+      manuscriptId: id,
+      userId: user.id,
+    }),
+  ]);
 
   if (!manuscript) {
     notFound();

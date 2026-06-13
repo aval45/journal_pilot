@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import type { ActionResult } from "@/lib/action-result";
 import type { AuditLogDb } from "@/lib/audit";
-import { requireCurrentUser } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { sanitizeFileName } from "@/lib/file-policy";
 import {
   generateDisplayId,
@@ -94,13 +94,13 @@ async function assertActiveJournalAndArticleType({
 export async function createManuscriptDraftAction(
   input: unknown,
 ): Promise<ActionResult<{ manuscriptId: string }>> {
+  const user = await requireAuth();
   const parsed = createDraftShellSchema.safeParse(input);
 
   if (!parsed.success) {
     return { success: false, error: "Choose a valid journal." };
   }
 
-  const user = await requireCurrentUser();
   await assertHasRole(user.id, UserRole.AUTHOR);
   const rateLimitError = await limitDraftMutation(user.id);
 
@@ -148,13 +148,13 @@ export async function createManuscriptDraftAction(
 export async function autosaveManuscriptDraftAction(
   input: unknown,
 ): Promise<ActionResult<{ manuscriptId: string }>> {
+  const user = await requireAuth();
   const parsed = autosaveDraftSchema.safeParse(input);
 
   if (!parsed.success) {
     return { success: false, error: "Check the manuscript fields and try again." };
   }
 
-  const user = await requireCurrentUser();
   const rateLimitError = await limitDraftMutation(user.id);
 
   if (rateLimitError) {
@@ -246,13 +246,13 @@ async function getUploadableManuscriptForAuthor(
 }
 
 export async function addCoAuthorAction(input: unknown): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = coAuthorSchema.safeParse(input);
 
   if (!parsed.success) {
     return { success: false, error: "Check the co-author fields and try again." };
   }
 
-  const user = await requireCurrentUser();
   const rateLimitError = await limitDraftMutation(user.id);
 
   if (rateLimitError) {
@@ -317,13 +317,13 @@ export async function addCoAuthorAction(input: unknown): Promise<ActionResult> {
 }
 
 export async function removeCoAuthorAction(input: unknown): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = removeCoAuthorSchema.safeParse(input);
 
   if (!parsed.success) {
     return { success: false, error: "Choose a valid co-author." };
   }
 
-  const user = await requireCurrentUser();
   const canEdit = await assertEditableDraftForAuthor(
     user.id,
     parsed.data.manuscriptId,
@@ -369,13 +369,13 @@ export async function removeCoAuthorAction(input: unknown): Promise<ActionResult
 export async function reorderCoAuthorsAction(
   input: unknown,
 ): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = reorderCoAuthorsSchema.safeParse(input);
 
   if (!parsed.success) {
     return { success: false, error: "Choose a valid author order." };
   }
 
-  const user = await requireCurrentUser();
   const canEdit = await assertEditableDraftForAuthor(
     user.id,
     parsed.data.manuscriptId,
@@ -434,16 +434,15 @@ export async function createManuscriptUploadUrlAction(
     bucket: string;
     fileId: string;
     path: string;
-    token: string;
+    signedUrl: string;
   }>
 > {
+  const user = await requireAuth();
   const parsed = uploadMetadataSchema.safeParse(input);
 
   if (!parsed.success) {
     return { success: false, error: "Choose an accepted file under 50 MB." };
   }
-
-  const user = await requireCurrentUser();
 
   try {
     await assertServerActionRateLimit({
@@ -481,7 +480,7 @@ export async function createManuscriptUploadUrlAction(
     .from(bucket)
     .createSignedUploadUrl(filePath, { upsert: false });
 
-  if (error || !data?.token) {
+  if (error || !data?.signedUrl) {
     return {
       success: false,
       error:
@@ -516,7 +515,7 @@ export async function createManuscriptUploadUrlAction(
       bucket,
       fileId,
       path: data.path,
-      token: data.token,
+      signedUrl: data.signedUrl,
     },
   };
 }
@@ -543,6 +542,7 @@ async function limitSubmission(userId: string) {
 export async function submitManuscriptAction(
   input: unknown,
 ): Promise<ActionResult<{ displayId: string }>> {
+  const user = await requireAuth();
   const parsed = submitManuscriptSchema.safeParse(input);
 
   if (!parsed.success) {
@@ -552,7 +552,6 @@ export async function submitManuscriptAction(
     };
   }
 
-  const user = await requireCurrentUser();
   const rateLimitError = await limitSubmission(user.id);
 
   if (rateLimitError) {
@@ -623,6 +622,7 @@ export async function submitManuscriptAction(
 export async function submitRevisionAction(
   input: unknown,
 ): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = submitManuscriptSchema.safeParse(input);
 
   if (!parsed.success) {
@@ -632,7 +632,6 @@ export async function submitRevisionAction(
     };
   }
 
-  const user = await requireCurrentUser();
   const rateLimitError = await limitSubmission(user.id);
 
   if (rateLimitError) {
@@ -658,23 +657,24 @@ export async function submitRevisionAction(
       return false;
     }
 
-    await tx.manuscript.update({
-      where: { id: parsed.data.manuscriptId },
-      data: {
-        coverLetter: parsed.data.coverLetter || null,
-        revisionNumber: manuscript.revisionNumber + 1,
-      },
-    });
-
-    await transitionStatusWithClient(
-      tx as unknown as StatusMachineDb & AuditLogDb,
-      {
-        actor: { type: "USER", userId: user.id },
-        manuscriptId: parsed.data.manuscriptId,
-        note: "Author submitted revision.",
-        toStatus: ManuscriptStatus.REVISION_SUBMITTED,
-      },
-    );
+    await Promise.all([
+      tx.manuscript.update({
+        where: { id: parsed.data.manuscriptId },
+        data: {
+          coverLetter: parsed.data.coverLetter || null,
+          revisionNumber: manuscript.revisionNumber + 1,
+        },
+      }),
+      transitionStatusWithClient(
+        tx as unknown as StatusMachineDb & AuditLogDb,
+        {
+          actor: { type: "USER", userId: user.id },
+          manuscriptId: parsed.data.manuscriptId,
+          note: "Author submitted revision.",
+          toStatus: ManuscriptStatus.REVISION_SUBMITTED,
+        },
+      ),
+    ]);
     await transitionStatusWithClient(
       tx as unknown as StatusMachineDb & AuditLogDb,
       {

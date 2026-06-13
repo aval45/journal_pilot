@@ -5,7 +5,7 @@ import { z } from "zod";
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import type { ActionResult } from "@/lib/action-result";
 import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
-import { requireCurrentUser } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertAuthorOf, assertHasRole } from "@/lib/permissions";
 import {
@@ -48,13 +48,13 @@ async function limitManuscriptLifecycle(userId: string, manuscriptId: string) {
 export async function softDeleteDraftManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = lifecycleSchema.safeParse(input);
 
   if (!parsed.success) {
     return safeError("Choose a valid manuscript.");
   }
 
-  const user = await requireCurrentUser();
   const rateLimitError = await limitManuscriptLifecycle(
     user.id,
     parsed.data.manuscriptId,
@@ -107,23 +107,21 @@ export async function softDeleteDraftManuscriptAction(
 export async function restoreManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = lifecycleSchema.safeParse(input);
 
   if (!parsed.success) {
     return safeError("Choose a valid manuscript.");
   }
 
-  const user = await requireCurrentUser();
-  const rateLimitError = await limitManuscriptLifecycle(
-    user.id,
-    parsed.data.manuscriptId,
-  );
+  const [rateLimitError] = await Promise.all([
+    limitManuscriptLifecycle(user.id, parsed.data.manuscriptId),
+    assertHasRole(user.id, UserRole.ADMIN),
+  ]);
 
   if (rateLimitError) {
     return rateLimitError;
   }
-
-  await assertHasRole(user.id, UserRole.ADMIN);
 
   await prisma.manuscript.update({
     where: { id: parsed.data.manuscriptId },
@@ -148,23 +146,21 @@ export async function restoreManuscriptAction(
 export async function archiveManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = lifecycleSchema.safeParse(input);
 
   if (!parsed.success) {
     return safeError("Choose a valid manuscript.");
   }
 
-  const user = await requireCurrentUser();
-  const rateLimitError = await limitManuscriptLifecycle(
-    user.id,
-    parsed.data.manuscriptId,
-  );
+  const [rateLimitError] = await Promise.all([
+    limitManuscriptLifecycle(user.id, parsed.data.manuscriptId),
+    assertHasRole(user.id, UserRole.ADMIN),
+  ]);
 
   if (rateLimitError) {
     return rateLimitError;
   }
-
-  await assertHasRole(user.id, UserRole.ADMIN);
 
   await prisma.manuscript.update({
     where: { id: parsed.data.manuscriptId },
@@ -187,13 +183,13 @@ export async function archiveManuscriptAction(
 export async function withdrawManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = lifecycleSchema.safeParse(input);
 
   if (!parsed.success) {
     return safeError("Choose a valid manuscript.");
   }
 
-  const user = await requireCurrentUser();
   const rateLimitError = await limitManuscriptLifecycle(
     user.id,
     parsed.data.manuscriptId,
@@ -210,21 +206,22 @@ export async function withdrawManuscriptAction(
     toStatus: ManuscriptStatus.WITHDRAWN,
   });
 
-  await prisma.manuscript.update({
-    where: { id: parsed.data.manuscriptId },
-    data: {
-      withdrawnById: user.id,
-      withdrawalReason: parsed.data.reason,
-    },
-  });
-
-  await tryWriteAuditLog({
-    action: AUDIT_ACTIONS.MANUSCRIPT_WITHDRAWN,
-    actorType: "USER",
-    actorUserId: user.id,
-    entityType: "Manuscript",
-    entityId: parsed.data.manuscriptId,
-  });
+  await Promise.all([
+    prisma.manuscript.update({
+      where: { id: parsed.data.manuscriptId },
+      data: {
+        withdrawnById: user.id,
+        withdrawalReason: parsed.data.reason,
+      },
+    }),
+    tryWriteAuditLog({
+      action: AUDIT_ACTIONS.MANUSCRIPT_WITHDRAWN,
+      actorType: "USER",
+      actorUserId: user.id,
+      entityType: "Manuscript",
+      entityId: parsed.data.manuscriptId,
+    }),
+  ]);
 
   return { success: true, data: undefined };
 }
@@ -232,13 +229,13 @@ export async function withdrawManuscriptAction(
 export async function hardDeleteDraftManuscriptAction(
   input: z.infer<typeof lifecycleSchema>,
 ): Promise<ActionResult> {
+  const user = await requireAuth();
   const parsed = lifecycleSchema.safeParse(input);
 
   if (!parsed.success) {
     return safeError("Choose a valid manuscript.");
   }
 
-  const user = await requireCurrentUser();
   const rateLimitError = await limitManuscriptLifecycle(
     user.id,
     parsed.data.manuscriptId,

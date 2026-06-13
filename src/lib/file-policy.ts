@@ -34,7 +34,7 @@ export const UPLOAD_FILE_CATEGORIES = [
 
 export type UploadFileCategory = (typeof UPLOAD_FILE_CATEGORIES)[number];
 
-export function getFileExtension(fileName: string) {
+function getFileExtension(fileName: string) {
   const normalized = fileName.trim().toLowerCase();
   const dotIndex = normalized.lastIndexOf(".");
 

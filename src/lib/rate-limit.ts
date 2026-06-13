@@ -220,8 +220,11 @@ export function getTrustedClientIp(headers: Headers) {
 
   const hops = forwardedFor
     .split(",")
-    .map((hop) => hop.trim())
-    .filter(Boolean);
+    .flatMap((hop) => {
+      const trimmed = hop.trim();
+
+      return trimmed ? [trimmed] : [];
+    });
   const clientIndex = hops.length - trustedProxyCount - 1;
 
   return clientIndex >= 0 ? hops[clientIndex] : null;

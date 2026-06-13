@@ -5,7 +5,7 @@ import { z } from "zod";
 import { UserRole } from "@/generated/prisma/enums";
 import type { ActionResult } from "@/lib/action-result";
 import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
-import { requireCurrentUser } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   assertServerActionRateLimit,
@@ -21,13 +21,12 @@ const switchRoleSchema = z.object({
 export async function switchDashboardRoleAction(
   input: z.infer<typeof switchRoleSchema>,
 ): Promise<ActionResult<{ role: UserRole }>> {
+  const user = await requireAuth();
   const parsed = switchRoleSchema.safeParse(input);
 
   if (!parsed.success) {
     return { success: false, error: "Choose a valid role." };
   }
-
-  const user = await requireCurrentUser();
 
   try {
     await assertServerActionRateLimit({
