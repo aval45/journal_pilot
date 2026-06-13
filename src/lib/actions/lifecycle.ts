@@ -8,6 +8,12 @@ import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
 import { requireCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertAuthorOf, assertHasRole } from "@/lib/permissions";
+import {
+  assertServerActionRateLimit,
+  isRateLimitError,
+  RATE_LIMIT_SUBJECTS,
+  rateLimitActionError,
+} from "@/lib/rate-limit";
 import { transitionStatus } from "@/lib/status-machine";
 
 const lifecycleSchema = z.object({
@@ -17,6 +23,26 @@ const lifecycleSchema = z.object({
 
 function safeError(message: string): ActionResult {
   return { success: false, error: message };
+}
+
+async function limitManuscriptLifecycle(userId: string, manuscriptId: string) {
+  try {
+    await assertServerActionRateLimit({
+      actorType: "USER",
+      actorUserId: userId,
+      manuscriptId,
+      subject: RATE_LIMIT_SUBJECTS.MANUSCRIPT_LIFECYCLE,
+      userId,
+    });
+
+    return null;
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      return rateLimitActionError();
+    }
+
+    throw error;
+  }
 }
 
 export async function softDeleteDraftManuscriptAction(
@@ -29,6 +55,15 @@ export async function softDeleteDraftManuscriptAction(
   }
 
   const user = await requireCurrentUser();
+  const rateLimitError = await limitManuscriptLifecycle(
+    user.id,
+    parsed.data.manuscriptId,
+  );
+
+  if (rateLimitError) {
+    return rateLimitError;
+  }
+
   await assertAuthorOf(user.id, parsed.data.manuscriptId);
 
   const manuscript = await prisma.manuscript.findFirst({
@@ -79,6 +114,15 @@ export async function restoreManuscriptAction(
   }
 
   const user = await requireCurrentUser();
+  const rateLimitError = await limitManuscriptLifecycle(
+    user.id,
+    parsed.data.manuscriptId,
+  );
+
+  if (rateLimitError) {
+    return rateLimitError;
+  }
+
   await assertHasRole(user.id, UserRole.ADMIN);
 
   await prisma.manuscript.update({
@@ -111,6 +155,15 @@ export async function archiveManuscriptAction(
   }
 
   const user = await requireCurrentUser();
+  const rateLimitError = await limitManuscriptLifecycle(
+    user.id,
+    parsed.data.manuscriptId,
+  );
+
+  if (rateLimitError) {
+    return rateLimitError;
+  }
+
   await assertHasRole(user.id, UserRole.ADMIN);
 
   await prisma.manuscript.update({
@@ -141,6 +194,14 @@ export async function withdrawManuscriptAction(
   }
 
   const user = await requireCurrentUser();
+  const rateLimitError = await limitManuscriptLifecycle(
+    user.id,
+    parsed.data.manuscriptId,
+  );
+
+  if (rateLimitError) {
+    return rateLimitError;
+  }
 
   await transitionStatus({
     actor: { type: "USER", userId: user.id },
@@ -178,6 +239,15 @@ export async function hardDeleteDraftManuscriptAction(
   }
 
   const user = await requireCurrentUser();
+  const rateLimitError = await limitManuscriptLifecycle(
+    user.id,
+    parsed.data.manuscriptId,
+  );
+
+  if (rateLimitError) {
+    return rateLimitError;
+  }
+
   await assertAuthorOf(user.id, parsed.data.manuscriptId);
 
   const manuscript = await prisma.manuscript.findFirst({

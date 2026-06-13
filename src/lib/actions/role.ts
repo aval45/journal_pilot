@@ -7,6 +7,12 @@ import type { ActionResult } from "@/lib/action-result";
 import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
 import { requireCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  assertServerActionRateLimit,
+  isRateLimitError,
+  RATE_LIMIT_SUBJECTS,
+  rateLimitActionError,
+} from "@/lib/rate-limit";
 
 const switchRoleSchema = z.object({
   role: z.enum(UserRole),
@@ -22,6 +28,21 @@ export async function switchDashboardRoleAction(
   }
 
   const user = await requireCurrentUser();
+
+  try {
+    await assertServerActionRateLimit({
+      actorType: "USER",
+      actorUserId: user.id,
+      subject: RATE_LIMIT_SUBJECTS.DASHBOARD_ROLE_SWITCH,
+      userId: user.id,
+    });
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      return rateLimitActionError();
+    }
+
+    throw error;
+  }
 
   if (!user.roles.includes(parsed.data.role)) {
     await tryWriteAuditLog({

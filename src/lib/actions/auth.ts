@@ -7,6 +7,13 @@ import type { AuthActionState } from "@/lib/actions/auth-state";
 import { getAppUrl } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import {
+  assertServerActionRateLimit,
+  isRateLimitError,
+  RATE_LIMIT_SUBJECTS,
+  rateLimitActionError,
+  type RateLimitSubject,
+} from "@/lib/rate-limit";
+import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
@@ -32,6 +39,27 @@ async function cleanupSupabaseUser(userId: string) {
   }
 }
 
+async function getAuthRateLimitError(
+  subject: RateLimitSubject,
+  email: string,
+): Promise<AuthActionState | null> {
+  try {
+    await assertServerActionRateLimit({
+      actorType: "ANONYMOUS",
+      email,
+      subject,
+    });
+
+    return null;
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      return rateLimitActionError();
+    }
+
+    throw error;
+  }
+}
+
 export async function loginAction(
   _previousState: AuthActionState,
   formData: FormData,
@@ -40,6 +68,15 @@ export async function loginAction(
 
   if (!parsed.success) {
     return validationError();
+  }
+
+  const rateLimitError = await getAuthRateLimitError(
+    RATE_LIMIT_SUBJECTS.AUTH_LOGIN,
+    parsed.data.email,
+  );
+
+  if (rateLimitError) {
+    return rateLimitError;
   }
 
   const supabase = await createSupabaseServerClient();
@@ -63,6 +100,15 @@ export async function registerAction(
 
   if (!parsed.success) {
     return validationError();
+  }
+
+  const rateLimitError = await getAuthRateLimitError(
+    RATE_LIMIT_SUBJECTS.AUTH_REGISTER,
+    parsed.data.email,
+  );
+
+  if (rateLimitError) {
+    return rateLimitError;
   }
 
   const supabase = await createSupabaseServerClient();
@@ -126,6 +172,15 @@ export async function forgotPasswordAction(
 
   if (!parsed.success) {
     return validationError();
+  }
+
+  const rateLimitError = await getAuthRateLimitError(
+    RATE_LIMIT_SUBJECTS.AUTH_FORGOT_PASSWORD,
+    parsed.data.email,
+  );
+
+  if (rateLimitError) {
+    return rateLimitError;
   }
 
   const supabase = await createSupabaseServerClient();
