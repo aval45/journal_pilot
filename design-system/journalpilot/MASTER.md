@@ -7,7 +7,7 @@
 ---
 
 **Project:** JournalPilot
-**Generated:** 2026-06-13 14:01:20
+**Generated:** 2026-06-13 15:05:41
 **Category:** Micro SaaS
 
 ---
@@ -16,7 +16,7 @@
 
 JournalPilot is an authenticated operational SaaS dashboard for academic manuscript submission and peer review.
 
-Use the skill-generated dashboard, accessibility, typography, spacing, table, form, and interaction guidance. Ignore any generated marketing-page, hero, conversion, portfolio, product-review, contact-sales, logo-carousel, testimonial, or landing-page section guidance for authenticated app screens.
+Use the skill-generated dashboard, accessibility, typography, spacing, table, form, and interaction guidance. Ignore any generated marketing-page, hero, conversion, portfolio, product-review, contact-sales, logo-carousel, testimonial, lead-magnet, or landing-page section guidance for authenticated app screens.
 
 Preferred visual direction:
 
@@ -183,11 +183,11 @@ Preferred visual direction:
 
 ### Page Pattern
 
-**Pattern Name:** Product Review/Ratings Focused
+**Pattern Name:** Operational SaaS Dashboard
 
-- **Conversion Strategy:** User-generated content builds trust. Show verified purchases. Filter by rating. Respond to negative reviews.
-- **CTA Placement:** After reviews summary + Buy button alongside reviews
-- **Section Order:** 1. Hero (product + aggregate rating), 2. Rating breakdown, 3. Individual reviews, 4. Buy/CTA
+- **Workflow Strategy:** Put queues, status, next actions, validation, and audit-friendly feedback ahead of marketing content.
+- **CTA Placement:** Contextual task actions in headers, toolbars, and wizard footers.
+- **Section Order:** 1. Page context, 2. Key metrics or progress, 3. Primary work surface, 4. Supporting activity/timeline.
 
 ---
 
