@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import type { ActionResult } from "@/lib/action-result";
+import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
 import { requireCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertAuthorOf, assertHasRole } from "@/lib/permissions";
@@ -57,6 +58,14 @@ export async function softDeleteDraftManuscriptAction(
     },
   });
 
+  await tryWriteAuditLog({
+    action: AUDIT_ACTIONS.MANUSCRIPT_SOFT_DELETED,
+    actorType: "USER",
+    actorUserId: user.id,
+    entityType: "Manuscript",
+    entityId: parsed.data.manuscriptId,
+  });
+
   return { success: true, data: undefined };
 }
 
@@ -81,6 +90,14 @@ export async function restoreManuscriptAction(
     },
   });
 
+  await tryWriteAuditLog({
+    action: "MANUSCRIPT_RESTORED",
+    actorType: "USER",
+    actorUserId: user.id,
+    entityType: "Manuscript",
+    entityId: parsed.data.manuscriptId,
+  });
+
   return { success: true, data: undefined };
 }
 
@@ -101,6 +118,14 @@ export async function archiveManuscriptAction(
     data: {
       archivedAt: new Date(),
     },
+  });
+
+  await tryWriteAuditLog({
+    action: AUDIT_ACTIONS.MANUSCRIPT_ARCHIVED,
+    actorType: "USER",
+    actorUserId: user.id,
+    entityType: "Manuscript",
+    entityId: parsed.data.manuscriptId,
   });
 
   return { success: true, data: undefined };
@@ -130,6 +155,14 @@ export async function withdrawManuscriptAction(
       withdrawnById: user.id,
       withdrawalReason: parsed.data.reason,
     },
+  });
+
+  await tryWriteAuditLog({
+    action: AUDIT_ACTIONS.MANUSCRIPT_WITHDRAWN,
+    actorType: "USER",
+    actorUserId: user.id,
+    entityType: "Manuscript",
+    entityId: parsed.data.manuscriptId,
   });
 
   return { success: true, data: undefined };
@@ -167,6 +200,14 @@ export async function hardDeleteDraftManuscriptAction(
 
   await prisma.manuscript.delete({
     where: { id: parsed.data.manuscriptId },
+  });
+
+  await tryWriteAuditLog({
+    action: AUDIT_ACTIONS.DRAFT_HARD_DELETED,
+    actorType: "USER",
+    actorUserId: user.id,
+    entityType: "Manuscript",
+    entityId: parsed.data.manuscriptId,
   });
 
   return { success: true, data: undefined };

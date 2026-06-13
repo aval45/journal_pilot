@@ -2,6 +2,7 @@ import "server-only";
 
 import { UserRole } from "@/generated/prisma/enums";
 import { AccessDeniedError } from "@/lib/access-errors";
+import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 export { assertCanTransition } from "@/lib/status-machine";
 
@@ -24,6 +25,17 @@ export async function assertHasRole(userId: string, role: UserRole) {
   const user = await getActiveUser(userId);
 
   if (!user.roles.includes(role)) {
+    await tryWriteAuditLog({
+      action: AUDIT_ACTIONS.ACCESS_DENIED,
+      actorType: "USER",
+      actorUserId: user.id,
+      entityType: "UserRole",
+      entityId: role,
+      outcome: "DENIED",
+      metadata: {
+        requiredRole: role,
+      },
+    });
     throw new AccessDeniedError();
   }
 }

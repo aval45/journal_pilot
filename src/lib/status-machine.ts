@@ -6,6 +6,12 @@ import {
   UserRole,
 } from "@/generated/prisma/enums";
 import { AccessDeniedError } from "@/lib/access-errors";
+import {
+  AUDIT_ACTIONS,
+  writeAuditLogWithClient,
+  type AuditLogDb,
+  type AuditMetadata,
+} from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 export type SystemAction =
@@ -55,6 +61,21 @@ export type StatusMachineDb = {
   };
   manuscriptStatusHistory: {
     create: (args: QueryArgs) => Promise<unknown>;
+  };
+  auditLog: {
+    create: (args: {
+      data: {
+        action: string;
+        actorType: "USER" | "SYSTEM" | "ANONYMOUS" | "EXTERNAL";
+        actorUserId?: string | null;
+        entityId?: string | null;
+        entityType: string;
+        ipHash?: string | null;
+        metadata?: AuditMetadata | null;
+        outcome: "SUCCESS" | "DENIED" | "ERROR";
+        userAgentHash?: string | null;
+      };
+    }) => Promise<unknown>;
   };
   reviewInvitation: {
     findFirst: (args: QueryArgs) => Promise<{ id: string } | null>;
@@ -433,6 +454,25 @@ export async function transitionStatus({
         changedById: actor.type === "USER" ? actor.userId : null,
         systemAction: actor.type === "SYSTEM" ? actor.systemAction : null,
         note,
+      },
+    });
+
+    const auditAction =
+      toStatus === ManuscriptStatus.SUBMITTED
+        ? AUDIT_ACTIONS.MANUSCRIPT_SUBMITTED
+        : toStatus === ManuscriptStatus.WITHDRAWN
+          ? AUDIT_ACTIONS.MANUSCRIPT_WITHDRAWN
+          : "MANUSCRIPT_STATUS_CHANGED";
+
+    await writeAuditLogWithClient(tx as unknown as AuditLogDb, {
+      action: auditAction,
+      actorType: actor.type === "USER" ? "USER" : "SYSTEM",
+      actorUserId: actor.type === "USER" ? actor.userId : null,
+      entityId: manuscriptId,
+      entityType: "Manuscript",
+      metadata: {
+        fromStatus: manuscript.status,
+        toStatus,
       },
     });
 

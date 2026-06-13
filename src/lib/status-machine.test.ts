@@ -53,6 +53,9 @@ function createDb({
     manuscriptStatusHistory: {
       create: vi.fn().mockResolvedValue({ id: "history-1" }),
     },
+    auditLog: {
+      create: vi.fn().mockResolvedValue({ id: "audit-1" }),
+    },
     reviewInvitation: {
       findFirst: vi.fn(),
     },
