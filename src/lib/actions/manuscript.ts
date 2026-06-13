@@ -657,24 +657,23 @@ export async function submitRevisionAction(
       return false;
     }
 
-    await Promise.all([
-      tx.manuscript.update({
-        where: { id: parsed.data.manuscriptId },
-        data: {
-          coverLetter: parsed.data.coverLetter || null,
-          revisionNumber: manuscript.revisionNumber + 1,
-        },
-      }),
-      transitionStatusWithClient(
-        tx as unknown as StatusMachineDb & AuditLogDb,
-        {
-          actor: { type: "USER", userId: user.id },
-          manuscriptId: parsed.data.manuscriptId,
-          note: "Author submitted revision.",
-          toStatus: ManuscriptStatus.REVISION_SUBMITTED,
-        },
-      ),
-    ]);
+    await tx.manuscript.update({
+      where: { id: parsed.data.manuscriptId },
+      data: {
+        coverLetter: parsed.data.coverLetter || null,
+        revisionNumber: manuscript.revisionNumber + 1,
+      },
+    });
+
+    await transitionStatusWithClient(
+      tx as unknown as StatusMachineDb & AuditLogDb,
+      {
+        actor: { type: "USER", userId: user.id },
+        manuscriptId: parsed.data.manuscriptId,
+        note: "Author submitted revision.",
+        toStatus: ManuscriptStatus.REVISION_SUBMITTED,
+      },
+    );
     await transitionStatusWithClient(
       tx as unknown as StatusMachineDb & AuditLogDb,
       {

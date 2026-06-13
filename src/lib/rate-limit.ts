@@ -175,6 +175,7 @@ export class RateLimitError extends Error {
 }
 
 const limiterCache = new Map<RateLimitSubject, RateLimiterClient>();
+let warnedAboutMissingRedis = false;
 
 function getTrustedHeaderName() {
   return process.env.TRUSTED_CLIENT_IP_HEADER?.toLowerCase() ?? "x-real-ip";
@@ -272,6 +273,15 @@ function getRedisLimiter(subject: RateLimitSubject) {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!url || !token) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Upstash Redis environment variables are required.");
+    }
+
+    if (!warnedAboutMissingRedis && process.env.NODE_ENV !== "test") {
+      console.warn("Rate limiting is disabled because Upstash Redis is not configured.");
+      warnedAboutMissingRedis = true;
+    }
+
     return null;
   }
 

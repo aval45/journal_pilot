@@ -3,6 +3,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 
 import type { UserModel } from "@/generated/prisma/models";
+import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -42,11 +43,39 @@ export async function getCurrentUser(): Promise<UserModel | null> {
 }
 
 export async function requireCurrentUser() {
-  const user = await getCurrentUser();
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user: authUser },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !authUser) {
+    throw new AuthenticationError();
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      id: authUser.id,
+    },
+  });
 
   if (!user) {
-    // TODO(feature-8): write ACCESS_DENIED audit logs for missing/deactivated users.
     throw new AuthenticationError();
+  }
+
+  if (user.deactivatedAt) {
+    await tryWriteAuditLog({
+      action: AUDIT_ACTIONS.ACCESS_DENIED,
+      actorType: "USER",
+      actorUserId: user.id,
+      entityType: "User",
+      entityId: user.id,
+      outcome: "DENIED",
+      metadata: {
+        reason: "deactivated_account",
+      },
+    });
+    throw new DeactivatedAccountError();
   }
 
   return user;

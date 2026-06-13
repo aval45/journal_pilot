@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 import { AuditActorType, AuditOutcome } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
@@ -109,9 +109,15 @@ export function sanitizeAuditMetadata(
 }
 
 export function hashAuditValue(value: string) {
-  const salt = process.env.RATE_LIMIT_SALT ?? "journalpilot-local-audit-salt";
+  const salt = process.env.RATE_LIMIT_SALT;
 
-  return createHash("sha256").update(`${salt}:${value}`).digest("hex");
+  if (!salt && process.env.NODE_ENV === "production") {
+    throw new Error("RATE_LIMIT_SALT is required for audit hashing.");
+  }
+
+  return createHmac("sha256", salt ?? "journalpilot-local-audit-salt")
+    .update(value)
+    .digest("hex");
 }
 
 export async function writeAuditLogWithClient(
@@ -140,7 +146,8 @@ export async function writeAuditLog(input: AuditLogInput) {
 export async function tryWriteAuditLog(input: AuditLogInput) {
   try {
     await writeAuditLog(input);
-  } catch {
+  } catch (error) {
     // Audit failures must not leak details or block user-safe action handling.
+    console.error("Audit log write failed.", error);
   }
 }

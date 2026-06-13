@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { AuditActorType, AuditOutcome } from "@/generated/prisma/enums";
 import {
@@ -9,6 +9,10 @@ import {
 } from "@/lib/audit";
 
 describe("audit logging", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   test("sanitizes secrets and confidential content from metadata", () => {
     expect(
       sanitizeAuditMetadata({
@@ -64,6 +68,13 @@ describe("audit logging", () => {
     expect(auditData.userAgentHash).not.toBe("Test Agent");
     expect(JSON.stringify(auditData)).not.toContain("203.0.113.10");
     expect(JSON.stringify(auditData)).not.toContain("Test Agent");
+  });
+
+  test("requires a configured audit salt in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("RATE_LIMIT_SALT", "");
+
+    expect(() => hashAuditValue("203.0.113.10")).toThrow("RATE_LIMIT_SALT");
   });
 
   test("creates audit log rows for sensitive actions", async () => {

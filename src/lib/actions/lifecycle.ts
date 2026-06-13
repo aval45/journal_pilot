@@ -4,17 +4,20 @@ import { z } from "zod";
 
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import type { ActionResult } from "@/lib/action-result";
-import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
+import { AUDIT_ACTIONS, tryWriteAuditLog, type AuditLogDb } from "@/lib/audit";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { assertAuthorOf, assertHasRole } from "@/lib/permissions";
+import { assertHasRole } from "@/lib/permissions";
 import {
   assertServerActionRateLimit,
   isRateLimitError,
   RATE_LIMIT_SUBJECTS,
   rateLimitActionError,
 } from "@/lib/rate-limit";
-import { transitionStatus } from "@/lib/status-machine";
+import {
+  transitionStatusWithClient,
+  type StatusMachineDb,
+} from "@/lib/status-machine";
 
 const lifecycleSchema = z.object({
   manuscriptId: z.string().min(1),
@@ -23,6 +26,16 @@ const lifecycleSchema = z.object({
 
 function safeError(message: string): ActionResult {
   return { success: false, error: message };
+}
+
+function isTerminalStatus(status: ManuscriptStatus) {
+  const terminalStatuses: ManuscriptStatus[] = [
+    ManuscriptStatus.ACCEPTED,
+    ManuscriptStatus.REJECTED,
+    ManuscriptStatus.WITHDRAWN,
+  ];
+
+  return terminalStatuses.includes(status);
 }
 
 async function limitManuscriptLifecycle(userId: string, manuscriptId: string) {
@@ -64,12 +77,13 @@ export async function softDeleteDraftManuscriptAction(
     return rateLimitError;
   }
 
-  await assertAuthorOf(user.id, parsed.data.manuscriptId);
+  await assertHasRole(user.id, UserRole.AUTHOR);
 
   const manuscript = await prisma.manuscript.findFirst({
     where: {
       id: parsed.data.manuscriptId,
       deletedAt: null,
+      submittingAuthorId: user.id,
     },
     select: {
       status: true,
@@ -123,6 +137,23 @@ export async function restoreManuscriptAction(
     return rateLimitError;
   }
 
+  const manuscript = await prisma.manuscript.findFirst({
+    where: {
+      id: parsed.data.manuscriptId,
+    },
+    select: {
+      deletedAt: true,
+    },
+  });
+
+  if (!manuscript) {
+    return safeError("This manuscript is no longer available.");
+  }
+
+  if (!manuscript.deletedAt) {
+    return safeError("Only deleted manuscripts can be restored.");
+  }
+
   await prisma.manuscript.update({
     where: { id: parsed.data.manuscriptId },
     data: {
@@ -162,6 +193,29 @@ export async function archiveManuscriptAction(
     return rateLimitError;
   }
 
+  const manuscript = await prisma.manuscript.findFirst({
+    where: {
+      id: parsed.data.manuscriptId,
+      deletedAt: null,
+    },
+    select: {
+      archivedAt: true,
+      status: true,
+    },
+  });
+
+  if (!manuscript) {
+    return safeError("This manuscript is no longer available.");
+  }
+
+  if (manuscript.archivedAt) {
+    return safeError("This manuscript is already archived.");
+  }
+
+  if (isTerminalStatus(manuscript.status)) {
+    return safeError("Withdrawn or decided manuscripts cannot be archived.");
+  }
+
   await prisma.manuscript.update({
     where: { id: parsed.data.manuscriptId },
     data: {
@@ -199,29 +253,22 @@ export async function withdrawManuscriptAction(
     return rateLimitError;
   }
 
-  await transitionStatus({
-    actor: { type: "USER", userId: user.id },
-    manuscriptId: parsed.data.manuscriptId,
-    note: parsed.data.reason,
-    toStatus: ManuscriptStatus.WITHDRAWN,
-  });
+  await prisma.$transaction(async (tx) => {
+    await transitionStatusWithClient(tx as unknown as StatusMachineDb & AuditLogDb, {
+      actor: { type: "USER", userId: user.id },
+      manuscriptId: parsed.data.manuscriptId,
+      note: parsed.data.reason,
+      toStatus: ManuscriptStatus.WITHDRAWN,
+    });
 
-  await Promise.all([
-    prisma.manuscript.update({
+    await tx.manuscript.update({
       where: { id: parsed.data.manuscriptId },
       data: {
         withdrawnById: user.id,
         withdrawalReason: parsed.data.reason,
       },
-    }),
-    tryWriteAuditLog({
-      action: AUDIT_ACTIONS.MANUSCRIPT_WITHDRAWN,
-      actorType: "USER",
-      actorUserId: user.id,
-      entityType: "Manuscript",
-      entityId: parsed.data.manuscriptId,
-    }),
-  ]);
+    });
+  });
 
   return { success: true, data: undefined };
 }
@@ -245,12 +292,13 @@ export async function hardDeleteDraftManuscriptAction(
     return rateLimitError;
   }
 
-  await assertAuthorOf(user.id, parsed.data.manuscriptId);
+  await assertHasRole(user.id, UserRole.AUTHOR);
 
   const manuscript = await prisma.manuscript.findFirst({
     where: {
       id: parsed.data.manuscriptId,
       deletedAt: null,
+      submittingAuthorId: user.id,
     },
     select: {
       status: true,

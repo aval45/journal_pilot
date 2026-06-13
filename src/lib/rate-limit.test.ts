@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   assertRateLimit,
   buildRateLimitKey,
+  checkRateLimit,
   getTrustedClientIp,
   RATE_LIMIT_SUBJECTS,
   RateLimitError,
@@ -100,6 +101,18 @@ describe("rate limiting", () => {
     expect(JSON.stringify(auditDeny.mock.calls[0][0].metadata)).not.toContain(
       "203.0.113.10",
     );
+  });
+
+  test("fails closed in production when Redis is not configured", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
+
+    await expect(
+      checkRateLimit({
+        subject: RATE_LIMIT_SUBJECTS.AUTH_LOGIN,
+      }),
+    ).rejects.toThrow("Upstash Redis");
   });
 
   test("verifies raw-body webhook signatures with HMAC-SHA256", () => {

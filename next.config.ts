@@ -4,12 +4,14 @@ const csp = [
   "default-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'self'",
+  "frame-ancestors 'none'",
   "object-src 'none'",
   "img-src 'self' data: blob:",
   "font-src 'self' https://fonts.gstatic.com data:",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  `script-src 'self' 'unsafe-inline'${
+    process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""
+  }`,
   "connect-src 'self' https://*.supabase.co https://*.upstash.io",
 ].join("; ");
 
@@ -28,7 +30,7 @@ const securityHeaders = [
   },
   {
     key: "X-Frame-Options",
-    value: "SAMEORIGIN",
+    value: "DENY",
   },
   {
     key: "Permissions-Policy",

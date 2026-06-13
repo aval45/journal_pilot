@@ -42,11 +42,9 @@ function normalizeRole(value: unknown): UserRole | null {
 }
 
 function getMetadataRoles(user: SupabaseProxyUser) {
-  const metadata = {
-    ...user.user_metadata,
-    ...user.app_metadata,
-  };
-  const rawRoles = Array.isArray(metadata.roles) ? metadata.roles : [];
+  const rawRoles = Array.isArray(user.app_metadata.roles)
+    ? user.app_metadata.roles
+    : [];
   const roles = rawRoles
     .map(normalizeRole)
     .filter((role): role is UserRole => Boolean(role));
@@ -55,12 +53,7 @@ function getMetadataRoles(user: SupabaseProxyUser) {
 }
 
 function getMetadataRole(user: SupabaseProxyUser, key: string) {
-  const metadata = {
-    ...user.user_metadata,
-    ...user.app_metadata,
-  };
-
-  return normalizeRole(metadata[key]);
+  return normalizeRole(user.app_metadata[key]);
 }
 
 function resolveDefaultRole(user: SupabaseProxyUser) {
@@ -118,7 +111,7 @@ export async function proxy(request: NextRequest) {
   const roleSegment = pathname.split("/")[2];
   const requestedRole = SEGMENT_TO_ROLE[roleSegment ?? ""];
 
-  if (!requestedRole || !getMetadataRoles(user).includes(requestedRole)) {
+  if (!requestedRole) {
     return redirectWithAuthCookies(new URL(defaultPath, request.url), response);
   }
 
