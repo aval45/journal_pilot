@@ -1,6 +1,7 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import type { UserModel } from "@/generated/prisma/models";
 import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
@@ -21,7 +22,7 @@ export class DeactivatedAccountError extends Error {
   }
 }
 
-export async function getCurrentUser(): Promise<UserModel | null> {
+export const getCurrentUser = cache(async (): Promise<UserModel | null> => {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user: authUser },
@@ -40,7 +41,7 @@ export async function getCurrentUser(): Promise<UserModel | null> {
   });
 
   return user;
-}
+});
 
 export async function requireCurrentUser() {
   const supabase = await createSupabaseServerClient();

@@ -1,12 +1,14 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { UserRole } from "@/generated/prisma/enums";
 import { AccessDeniedError } from "@/lib/access-errors";
 import { AUDIT_ACTIONS, tryWriteAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 export { assertCanTransition } from "@/lib/status-machine";
 
-async function getActiveUser(userId: string) {
+const getActiveUser = cache(async (userId: string) => {
   const user = await prisma.user.findFirst({
     where: {
       id: userId,
@@ -19,7 +21,7 @@ async function getActiveUser(userId: string) {
   }
 
   return user;
-}
+});
 
 export async function assertHasRole(userId: string, role: UserRole) {
   const user = await getActiveUser(userId);

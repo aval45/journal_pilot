@@ -1,3 +1,6 @@
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
+
 import { SubmissionWizard } from "@/components/submission/submission-wizard";
 import { UserRole } from "@/generated/prisma/enums";
 import { requireCurrentUser } from "@/lib/auth";
@@ -13,6 +16,13 @@ export default async function NewManuscriptPage() {
 
   return (
     <section className="mx-auto max-w-[1200px] space-y-6">
+      <Link
+        href="/dashboard/author"
+        className="inline-flex items-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft aria-hidden="true" className="mr-2 h-4 w-4" />
+        Back to manuscripts
+      </Link>
       <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <p className="text-sm font-medium uppercase text-primary">
           Submission wizard

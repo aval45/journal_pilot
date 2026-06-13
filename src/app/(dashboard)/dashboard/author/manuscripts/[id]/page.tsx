@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { CoAuthorPanel } from "@/components/submission/co-author-panel";
 import { FileUploadCard } from "@/components/submission/file-upload-card";
 import { SubmitManuscriptPanel } from "@/components/submission/submit-manuscript-panel";
@@ -49,6 +50,13 @@ export default async function AuthorManuscriptPage({
 
   return (
     <section className="space-y-6">
+      <Link
+        href="/dashboard/author"
+        className="inline-flex items-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft aria-hidden="true" className="mr-2 h-4 w-4" />
+        Back to manuscripts
+      </Link>
       <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -151,12 +159,12 @@ export default async function AuthorManuscriptPage({
               )}
             </div>
           </div>
-          <a
+          <Link
             className="mt-5 inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
             href={`/dashboard/author/manuscripts/${manuscript.id}/timeline`}
           >
             View timeline
-          </a>
+          </Link>
         </aside>
       </div>
     </section>
