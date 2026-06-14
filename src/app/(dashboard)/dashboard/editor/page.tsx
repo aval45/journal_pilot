@@ -2,7 +2,8 @@ import { Activity, AlertTriangle, FileText, Inbox } from "lucide-react";
 
 import { ManuscriptTitleLink } from "@/components/editor/manuscript-title-link";
 import { StatusBadge } from "@/components/editor/status-badge";
-import { ManuscriptStatus } from "@/generated/prisma/enums";
+import { DashboardRolePage } from "@/components/layout/dashboard-role-page";
+import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import { requireCurrentUser } from "@/lib/auth";
 import { getEditorDashboardData } from "@/lib/data/editor-dashboard";
 
@@ -31,6 +32,14 @@ export default async function EditorDashboardPage({
   searchParams,
 }: EditorDashboardPageProps) {
   const [user, params] = await Promise.all([requireCurrentUser(), searchParams]);
+
+  if (
+    !user.roles.includes(UserRole.EDITOR) &&
+    !user.roles.includes(UserRole.ADMIN)
+  ) {
+    return <DashboardRolePage role={UserRole.EDITOR} />;
+  }
+
   const data = await getEditorDashboardData(user);
   const selectedStatus = Object.values(ManuscriptStatus).includes(
     params.status as ManuscriptStatus,

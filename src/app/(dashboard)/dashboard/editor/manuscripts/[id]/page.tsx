@@ -11,6 +11,7 @@ import {
 } from "@/components/editor/editor-workflow-forms";
 import { DeadlineBadge } from "@/components/editor/deadline-badge";
 import { StatusBadge } from "@/components/editor/status-badge";
+import { DashboardRolePage } from "@/components/layout/dashboard-role-page";
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import { requireCurrentUser } from "@/lib/auth";
 import {
@@ -79,6 +80,14 @@ export default async function EditorManuscriptPage({
   params,
 }: EditorManuscriptPageProps) {
   const [{ id }, user] = await Promise.all([params, requireCurrentUser()]);
+
+  if (
+    !user.roles.includes(UserRole.EDITOR) &&
+    !user.roles.includes(UserRole.ADMIN)
+  ) {
+    return <DashboardRolePage role={UserRole.EDITOR} />;
+  }
+
   const [dashboardData, manuscript] = await Promise.all([
     getEditorDashboardData(user),
     getEditorManuscriptDetail({ manuscriptId: id, user }),
