@@ -8,6 +8,7 @@ import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import { formatFileSize } from "@/lib/file-policy";
 import { requireCurrentUser } from "@/lib/auth";
 import { getAuthorManuscriptDetail } from "@/lib/data/manuscript-detail";
+import { EDITORIAL_DECISION_LABELS } from "@/lib/editor-workflow";
 import { assertHasRole } from "@/lib/permissions";
 
 const STATUS_LABELS: Record<ManuscriptStatus, string> = {
@@ -25,6 +26,10 @@ const STATUS_LABELS: Record<ManuscriptStatus, string> = {
   WITHDRAWN: "Withdrawn",
   WITH_EDITOR: "With editor",
 };
+
+const MEDIUM_DATE_FORMATTER = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+});
 
 type ManuscriptPageProps = {
   params: Promise<{ id: string }>;
@@ -127,6 +132,32 @@ export default async function AuthorManuscriptPage({
               manuscriptId={manuscript.id}
               status={manuscript.status}
             />
+          ) : null}
+          {manuscript.decisions.length > 0 ? (
+            <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+              <h3 className="font-serif text-2xl font-semibold text-card-foreground">
+                Decision letter
+              </h3>
+              <div className="mt-5 space-y-4">
+                {manuscript.decisions.map((decision) => (
+                  <article
+                    className="rounded-md border border-border bg-background p-4"
+                    key={decision.id}
+                  >
+                    <p className="text-sm font-semibold text-card-foreground">
+                      {EDITORIAL_DECISION_LABELS[decision.decision]} · Revision{" "}
+                      {decision.revisionNumber}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {MEDIUM_DATE_FORMATTER.format(decision.createdAt)}
+                    </p>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                      {decision.decisionLetter}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </section>
           ) : null}
         </div>
 

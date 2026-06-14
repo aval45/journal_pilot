@@ -5,6 +5,13 @@ import type { ActionResult } from "@/lib/action-result";
 import { AuthenticationError, DeactivatedAccountError } from "@/lib/auth";
 import { RateLimitError, rateLimitActionError } from "@/lib/rate-limit";
 
+export class ActionInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ActionInputError";
+  }
+}
+
 export async function withActionErrorHandling<T>(
   action: () => Promise<ActionResult<T>>,
 ): Promise<ActionResult<T>> {
@@ -16,6 +23,13 @@ export async function withActionErrorHandling<T>(
       error instanceof DeactivatedAccountError ||
       error instanceof AccessDeniedError
     ) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    if (error instanceof ActionInputError) {
       return {
         success: false,
         error: error.message,

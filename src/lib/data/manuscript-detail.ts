@@ -57,6 +57,16 @@ export async function getAuthorManuscriptDetail({
           userId: true,
         },
       },
+      decisions: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          createdAt: true,
+          decision: true,
+          decisionLetter: true,
+          id: true,
+          revisionNumber: true,
+        },
+      },
       files: {
         where: {
           deletedAt: null,
