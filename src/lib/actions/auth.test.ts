@@ -44,7 +44,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: mocks.createSupabaseServerClient,
 }));
 
-vi.mock("@/lib/env", () => ({
+vi.mock("@/lib/env-public", () => ({
   getAppUrl: () => "http://localhost:3000",
 }));
 

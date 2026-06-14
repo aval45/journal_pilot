@@ -1,9 +1,6 @@
-import Link from "next/link";
+import { ManuscriptStatus } from "@/generated/prisma/enums";
 
-import { ManuscriptStatus, ReviewInvitationStatus } from "@/generated/prisma/enums";
-import { reviewDeadlineState } from "@/lib/editor-workflow";
-
-export const STATUS_LABELS: Record<ManuscriptStatus, string> = {
+const STATUS_LABELS: Record<ManuscriptStatus, string> = {
   ACCEPTED: "Accepted",
   DECISION_IN_PROCESS: "Decision in process",
   DRAFT: "Draft",
@@ -42,42 +39,5 @@ export function StatusBadge({ status }: { status: ManuscriptStatus }) {
     >
       {STATUS_LABELS[status]}
     </span>
-  );
-}
-
-export function DeadlineBadge({
-  dueDate,
-  status,
-}: {
-  dueDate?: Date | null;
-  status: ReviewInvitationStatus;
-}) {
-  const state = reviewDeadlineState({ dueDate, status });
-
-  if (!state) {
-    return null;
-  }
-
-  return (
-    <span className="inline-flex w-fit rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-foreground">
-      {state === "late" ? "Late" : "Overdue"}
-    </span>
-  );
-}
-
-export function ManuscriptTitleLink({
-  id,
-  title,
-}: {
-  id: string;
-  title: string;
-}) {
-  return (
-    <Link
-      className="font-semibold text-card-foreground underline-offset-4 transition-colors duration-200 hover:text-primary hover:underline"
-      href={`/dashboard/editor/manuscripts/${id}`}
-    >
-      {title}
-    </Link>
   );
 }

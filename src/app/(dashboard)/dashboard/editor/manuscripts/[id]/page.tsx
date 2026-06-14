@@ -9,7 +9,8 @@ import {
   RefreshProgressForm,
   ReviewerInvitationForm,
 } from "@/components/editor/editor-workflow-forms";
-import { DeadlineBadge, StatusBadge } from "@/components/editor/editor-ui";
+import { DeadlineBadge } from "@/components/editor/deadline-badge";
+import { StatusBadge } from "@/components/editor/status-badge";
 import { ManuscriptStatus, UserRole } from "@/generated/prisma/enums";
 import { requireCurrentUser } from "@/lib/auth";
 import {
@@ -23,12 +24,28 @@ type EditorManuscriptPageProps = {
   params: Promise<{ id: string }>;
 };
 
+const MEDIUM_DATE_FORMATTER = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+});
+
+const REVIEWER_ACTION_STATUSES: ManuscriptStatus[] = [
+  ManuscriptStatus.WITH_EDITOR,
+  ManuscriptStatus.REVIEWERS_INVITED,
+  ManuscriptStatus.UNDER_REVIEW,
+];
+
+const PROGRESS_ACTION_STATUSES: ManuscriptStatus[] = [
+  ManuscriptStatus.REVIEWERS_INVITED,
+  ManuscriptStatus.UNDER_REVIEW,
+];
+
+const DECISION_ACTION_STATUSES: ManuscriptStatus[] = [
+  ManuscriptStatus.REVIEWS_COMPLETED,
+  ManuscriptStatus.DECISION_IN_PROCESS,
+];
+
 function formatDate(date?: Date | null) {
-  return date
-    ? new Intl.DateTimeFormat("en", {
-        dateStyle: "medium",
-      }).format(date)
-    : "Not set";
+  return date ? MEDIUM_DATE_FORMATTER.format(date) : "Not set";
 }
 
 function workflowHint(status: ManuscriptStatus) {
@@ -72,28 +89,15 @@ export default async function EditorManuscriptPage({
   }
 
   const isAdmin = user.roles.includes(UserRole.ADMIN);
-  const reviewerActionStatuses: ManuscriptStatus[] = [
-    ManuscriptStatus.WITH_EDITOR,
-    ManuscriptStatus.REVIEWERS_INVITED,
-    ManuscriptStatus.UNDER_REVIEW,
-  ];
-  const progressActionStatuses: ManuscriptStatus[] = [
-    ManuscriptStatus.REVIEWERS_INVITED,
-    ManuscriptStatus.UNDER_REVIEW,
-  ];
-  const decisionActionStatuses: ManuscriptStatus[] = [
-    ManuscriptStatus.REVIEWS_COMPLETED,
-    ManuscriptStatus.DECISION_IN_PROCESS,
-  ];
   const canInviteReviewers =
     manuscript.handlingEditor?.id === user.id &&
-    reviewerActionStatuses.includes(manuscript.status);
+    REVIEWER_ACTION_STATUSES.includes(manuscript.status);
   const canRefreshProgress =
     manuscript.handlingEditor?.id === user.id &&
-    progressActionStatuses.includes(manuscript.status);
+    PROGRESS_ACTION_STATUSES.includes(manuscript.status);
   const canDecide =
     manuscript.handlingEditor?.id === user.id &&
-    decisionActionStatuses.includes(manuscript.status);
+    DECISION_ACTION_STATUSES.includes(manuscript.status);
   const currentInvitations = manuscript.invitations.filter(
     (invitation) => invitation.revisionNumber === manuscript.revisionNumber,
   );

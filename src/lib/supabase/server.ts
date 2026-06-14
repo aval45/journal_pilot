@@ -6,9 +6,9 @@ import { cookies } from "next/headers";
 
 import {
   getSupabasePublishableKey,
-  getSupabaseSecretKey,
   getSupabaseUrl,
-} from "@/lib/env";
+} from "@/lib/env-public";
+import { getSupabaseSecretKey } from "@/lib/env-server";
 
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();

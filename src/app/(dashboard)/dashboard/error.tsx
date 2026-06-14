@@ -24,6 +24,7 @@ export default function DashboardError({
       <button
         onClick={() => reset()}
         className="mt-6 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+        type="button"
       >
         <RefreshCw aria-hidden="true" className="mr-2 h-4 w-4" />
         Try again

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { UserRole } from "@/generated/prisma/enums";
 import type { AuthActionState } from "@/lib/actions/auth-state";
-import { getAppUrl } from "@/lib/env";
+import { getAppUrl } from "@/lib/env-public";
 import { prisma } from "@/lib/prisma";
 import {
   assertServerActionRateLimit,

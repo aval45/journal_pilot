@@ -35,15 +35,16 @@ export function UserDropdown({ userName, userEmail }: UserDropdownProps) {
         {initials}
       </summary>
 
-      {/* Invisible overlay to close dropdown when clicking outside */}
-      <div
-        className="fixed inset-0 z-40 hidden group-open:block"
-        onClick={(e) => {
-          const details = e.currentTarget.closest("details");
+      <button
+        aria-label="Close account menu"
+        className="fixed inset-0 z-40 hidden cursor-default group-open:block"
+        onClick={(event) => {
+          const details = event.currentTarget.closest("details");
           if (details) {
             details.removeAttribute("open");
           }
         }}
+        type="button"
       />
 
       <div className="absolute right-0 top-12 z-50 w-64 rounded-lg border border-border bg-card shadow-lg opacity-0 pointer-events-none transition-all duration-200 group-open:pointer-events-auto group-open:opacity-100">
@@ -58,6 +59,7 @@ export function UserDropdown({ userName, userEmail }: UserDropdownProps) {
             onClick={handleLogout}
             disabled={isPending}
             className="flex w-full cursor-pointer items-center rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
           >
             <LogOut aria-hidden="true" className="mr-2 h-4 w-4" />
             {isPending ? "Logging out..." : "Log out"}

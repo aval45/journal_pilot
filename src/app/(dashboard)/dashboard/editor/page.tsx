@@ -1,9 +1,7 @@
 import { Activity, AlertTriangle, FileText, Inbox } from "lucide-react";
 
-import {
-  ManuscriptTitleLink,
-  StatusBadge,
-} from "@/components/editor/editor-ui";
+import { ManuscriptTitleLink } from "@/components/editor/manuscript-title-link";
+import { StatusBadge } from "@/components/editor/status-badge";
 import { ManuscriptStatus } from "@/generated/prisma/enums";
 import { requireCurrentUser } from "@/lib/auth";
 import { getEditorDashboardData } from "@/lib/data/editor-dashboard";
